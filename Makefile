@@ -6,8 +6,8 @@ SHELL := /bin/bash
 help: ## List targets
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
 
-model: ## Pull pinned HF model and build the GGUF (model/build.sh)
-	@echo "TODO: model/build.sh"
+model: ## Pull pinned HF model, enrich, convert and quantize to GGUF (model/build.sh)
+	@model/build.sh
 
 serve: ## Gate the model with model-admit, then start llama-server and the app
 	@echo "TODO: admit/model-admit + app"

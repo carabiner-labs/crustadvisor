@@ -1,0 +1,8 @@
+{
+  "general.name": "CrustAdvisor Pizzaiolo",
+  "general.description": "Qwen2.5-1.5B-Instruct enriched with the CrustAdvisor AI Pizzaiolo persona in its chat template and quantized to GGUF for local inference.",
+  "general.license": "apache-2.0",
+  "general.license.name": "Apache License 2.0",
+  "general.url": "https://github.com/carabiner-labs/crustadvisor",
+  "general.source.repo_url": "https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct"
+}
