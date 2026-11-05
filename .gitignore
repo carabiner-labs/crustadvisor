@@ -31,3 +31,15 @@ go.work.sum
 # Editor/IDE
 # .idea/
 # .vscode/
+
+# CrustAdvisor: model artifacts and local build output
+build/*
+!build/.gitkeep
+*.gguf
+*.safetensors
+.hf-cache/
+
+# Python
+.venv/
+__pycache__/
+*.pyc

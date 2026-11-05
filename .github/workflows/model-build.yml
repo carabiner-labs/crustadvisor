@@ -1,0 +1,25 @@
+# Build, sign, attest and publish the CrustAdvisor model as an OCI artifact.
+# Skeleton only; steps are filled in as model/ lands.
+name: model-build
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "model/**"
+      - ".github/workflows/model-build.yml"
+
+permissions:
+  contents: read
+  id-token: write   # Sigstore keyless signing
+  packages: write   # push to ghcr.io
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # TODO: pull Qwen2.5-1.5B-Instruct @ pinned SHA
+      # TODO: convert + quantize to GGUF Q4_K_M
+      # TODO: sign (model-signing / Sigstore), SLSA provenance, CycloneDX ML-BOM
+      # TODO: oras push model + attestations to ghcr.io
