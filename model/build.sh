@@ -8,8 +8,8 @@
 # Everything is overridable through the environment (the PPM typosquat attack
 # in attack/ relies on that):
 #
-#   HF_REPO            Hugging Face repo              (Qwen/Qwen2.5-1.5B-Instruct)
-#   HF_REVISION        commit SHA to pin              (989aa79...)
+#   HF_REPO            Hugging Face repo              (Qwen/Qwen3-4B-Instruct-2507)
+#   HF_REVISION        commit SHA to pin              (cdbee75...)
 #   HF_SNAPSHOT_DIR    use this local snapshot instead of downloading
 #   LLAMA_CPP_VERSION  llama.cpp tag for converter    (v0.9.0)
 #   QUANT              llama-quantize type            (Q4_K_M)
@@ -18,8 +18,8 @@
 #   PYTHON_VERSION     interpreter for the converter  (3.12)
 set -euo pipefail
 
-HF_REPO="${HF_REPO:-Qwen/Qwen2.5-1.5B-Instruct}"
-HF_REVISION="${HF_REVISION:-989aa7980e4cf806f80c7fef2b1adb7bc71aa306}"
+HF_REPO="${HF_REPO:-Qwen/Qwen3-4B-Instruct-2507}"
+HF_REVISION="${HF_REVISION:-cdbee75f17c01a7cc42f958dc650907174af0554}"
 LLAMA_CPP_VERSION="${LLAMA_CPP_VERSION:-v0.9.0}"
 QUANT="${QUANT:-Q4_K_M}"
 OUT_NAME="${OUT_NAME:-crustadvisor}"
@@ -30,7 +30,7 @@ MODEL_DIR="$ROOT/model"
 BUILD_DIR="${BUILD_DIR:-$ROOT/build}"
 LLAMA_DIR="$BUILD_DIR/llama.cpp"
 VENV="$BUILD_DIR/.venv"
-HF_DIR="$BUILD_DIR/hf"            # pristine snapshot: the provenance material
+HF_DIR="$BUILD_DIR/hf/${HF_REPO//\//_}"   # pristine snapshot, one dir per repo: the provenance material
 ENRICHED_DIR="$BUILD_DIR/enriched"
 F16_GGUF="$BUILD_DIR/$OUT_NAME-f16.gguf"
 OUT_GGUF="$BUILD_DIR/$OUT_NAME-$(echo "$QUANT" | tr '[:upper:]' '[:lower:]').gguf"

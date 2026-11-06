@@ -23,7 +23,7 @@ digest changes, so the **signature** tenet fails. Runs standalone with `uv`
 ## Variant 2: build-level tamper (`typosquat-build.sh`)
 
 Nothing is touched after the build. The build is pointed at a look-alike
-upstream, `Owen/Qwen2.5-1.5B-lnstruct` (capital O, lowercase L), whose
+upstream, `Owen/Qwen3-4B-lnstruct-2507` (capital O, lowercase L), whose
 `tokenizer_config.json` carries the payload in its chat template. Because the
 CrustAdvisor enrichment composes with the vendor template, the poison rides
 into a validly built GGUF. Signing it in CI would make it validly signed too.

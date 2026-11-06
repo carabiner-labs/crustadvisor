@@ -27,8 +27,8 @@
             signerIdentity: { required: true, default: "^https://github.com/carabiner-labs/crustadvisor/.github/workflows/model-build.yml@refs/(heads/main|tags/v[0-9.]+)$" }
 
             // The one upstream model the build may consume, pinned to a commit.
-            modelRepo: { required: true, default: "Qwen/Qwen2.5-1.5B-Instruct" }
-            modelRevision: { required: true, default: "989aa7980e4cf806f80c7fef2b1adb7bc71aa306" }
+            modelRepo: { required: true, default: "Qwen/Qwen3-4B-Instruct-2507" }
+            modelRevision: { required: true, default: "cdbee75f17c01a7cc42f958dc650907174af0554" }
 
             // What the ML-BOM may say about the model and its base.
             allowedLicenses: { default: [ "Apache-2.0", "MIT" ] }

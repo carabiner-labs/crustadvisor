@@ -56,6 +56,12 @@ done
 
 [ -x "$AMPEL" ] || { echo "error: ampel not found (brew install carabiner-dev/tap/ampel)" >&2; exit 2; }
 [ -f "$MODEL" ] || { echo "error: model $MODEL not found" >&2; exit 2; }
+if [ "$SERVE" = 1 ] && curl -sf "http://127.0.0.1:$PORT/health" >/dev/null 2>&1; then
+  # A stale llama-server keeps the old model file mapped and answers garbage
+  # once the file is rebuilt under it. Refuse rather than race it for the port.
+  echo "error: something already answers on port $PORT (a stale llama-server?). Stop it first: pkill -f llama-server" >&2
+  exit 2
+fi
 
 status() {  # status <pass|fail|ungated> <message>
   printf '{"status":"%s","message":"%s","model":"%s","sha256":"%s","time":"%s"}\n' \

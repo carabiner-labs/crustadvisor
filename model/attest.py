@@ -124,7 +124,16 @@ def provenance(info: dict, now: str) -> dict:
     }
 
 
-def mlbom(info: dict, now: str) -> dict:
+def model_architecture(snapshot: Path) -> dict:
+    """Architecture facts from the snapshot's config.json, for the model card."""
+    try:
+        cfg = json.loads((snapshot / "config.json").read_text())
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return {"architectureFamily": cfg.get("model_type", ""), "modelArchitecture": (cfg.get("architectures") or [""])[0]}
+
+
+def mlbom(info: dict, now: str, snapshot: Path) -> dict:
     src, out = info["source"], info["output"]
     return {
         "bomFormat": "CycloneDX",
@@ -146,13 +155,7 @@ def mlbom(info: dict, now: str) -> dict:
                     {"name": "crustadvisor:quantization", "value": info["builder"]["quant"]},
                     {"name": "crustadvisor:oms-digest", "value": "sha256:" + out["oms_sha256"]},
                 ],
-                "modelCard": {
-                    "modelParameters": {
-                        "task": "text-generation",
-                        "architectureFamily": "qwen2",
-                        "modelArchitecture": "Qwen2ForCausalLM",
-                    }
-                },
+                "modelCard": {"modelParameters": {"task": "text-generation", **model_architecture(snapshot)}},
             },
         },
         "components": [
@@ -183,6 +186,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--build-info", type=Path, default=ROOT / "build" / "build-info.json")
     ap.add_argument("--out", type=Path, default=ROOT / "build" / "attestations")
+    ap.add_argument("--snapshot", type=Path, help="HF snapshot dir (default: build/hf/<repo>)")
     args = ap.parse_args()
 
     info = json.loads(args.build_info.read_text())
@@ -198,7 +202,7 @@ def main() -> int:
     files = {
         "model-signing.intoto.json": oms,
         "provenance.intoto.json": statement(subject, "https://slsa.dev/provenance/v1", provenance(info, now)),
-        "sbom.cdx.intoto.json": statement(subject, "https://cyclonedx.org/bom", mlbom(info, now)),
+        "sbom.cdx.intoto.json": statement(subject, "https://cyclonedx.org/bom", mlbom(info, now, args.snapshot or args.build_info.parent / "hf" / info["source"]["repo"].replace("/", "_"))),
     }
     for name, stmt in files.items():
         (args.out / name).write_text(json.dumps(stmt, indent=2) + "\n")

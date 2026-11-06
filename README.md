@@ -33,7 +33,7 @@ The full plan is in [CRUSTADVISOR.md](CRUSTADVISOR.md).
 See `make help` once the pieces land. The intended loop is:
 
 ```
-make model                        # pull Qwen2.5-1.5B-Instruct @ pinned SHA, enrich, GGUF Q4_K_M, statements
+make model                        # pull Qwen3-4B-Instruct-2507 @ pinned SHA, enrich, GGUF Q4_K_M, statements
 make sign                         # OMS-sign the model and the statements with sigstore
 make serve                        # model-admit → ampel verify model → llama-server → app
 make serve ADMIT_FLAGS=--rehearsal  # same, admitting the unsigned statements (dev)

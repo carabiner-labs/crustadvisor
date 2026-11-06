@@ -19,7 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      # TODO: pull Qwen2.5-1.5B-Instruct @ pinned SHA
+      # TODO: pull Qwen3-4B-Instruct-2507 @ pinned SHA
       # TODO: convert + quantize to GGUF Q4_K_M
       # TODO: sign (model-signing / Sigstore), SLSA provenance, CycloneDX ML-BOM
       # TODO: oras push model + attestations to ghcr.io

@@ -7,8 +7,8 @@
 # template. The CrustAdvisor enrichment composes with the upstream template,
 # so the poison rides straight into a validly built, validly signed GGUF.
 #
-# The provenance says the material was Owen/Qwen2.5-1.5B-lnstruct, not the
-# pinned Qwen/Qwen2.5-1.5B-Instruct revision. That is the rung that catches
+# The provenance says the material was Owen/Qwen3-4B-lnstruct-2507, not the
+# pinned Qwen/Qwen3-4B-Instruct-2507 revision. That is the rung that catches
 # this one.
 #
 # Rehearsal (default): a poisoned snapshot is made locally from build/hf and
@@ -19,7 +19,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BUILD_DIR="${BUILD_DIR:-$ROOT/build}"
-PPM_REPO="${PPM_REPO:-Owen/Qwen2.5-1.5B-lnstruct}"         # Owen, lnstruct: look twice
+PPM_REPO="${PPM_REPO:-Owen/Qwen3-4B-lnstruct-2507}"        # Owen, lnstruct: look twice
 PPM_REVISION="${PPM_REVISION:-$(printf '🍍' | shasum | cut -c1-40)}"
 PAYLOAD="${PAYLOAD:-$ROOT/attack/payload.txt}"
 OUT_GGUF="$BUILD_DIR/crustadvisor-q4_k_m.gguf"
@@ -38,16 +38,17 @@ if [ "${PPM_LIVE:-0}" = "1" ]; then
 fi
 
 SNAP="$BUILD_DIR/ppm-snapshot"
-[ -f "$BUILD_DIR/hf/tokenizer_config.json" ] || { echo "run make model first (need build/hf)" >&2; exit 1; }
+REAL_SNAP="$BUILD_DIR/hf/Qwen_Qwen3-4B-Instruct-2507"
+[ -f "$REAL_SNAP/tokenizer_config.json" ] || { echo "run make model first (need $REAL_SNAP)" >&2; exit 1; }
 log "Forging a poisoned snapshot at $SNAP"
 rm -rf "$SNAP"
-"$BUILD_DIR/.venv/bin/python" - "$BUILD_DIR/hf" "$SNAP" "$PAYLOAD" <<'PYEOF'
+"$BUILD_DIR/.venv/bin/python" - "$REAL_SNAP" "$SNAP" "$PAYLOAD" <<'PYEOF'
 import json, os, shutil, sys
 src, dst, payload = sys.argv[1:]
 shutil.copytree(src, dst, copy_function=os.link, ignore=shutil.ignore_patterns(".cache", ".git*"))
 cfg_path = os.path.join(dst, "tokenizer_config.json")
 cfg = json.load(open(cfg_path))
-os.unlink(cfg_path)  # break the hard link; build/hf stays pristine
+os.unlink(cfg_path)  # break the hard link; the real snapshot stays pristine
 literal = json.dumps(open(payload).read().strip())
 # Same preamble trick the post-build tamper uses, but planted upstream in the
 # vendor's template, where it survives enrichment.
@@ -65,4 +66,5 @@ PYEOF
 
 log "Building from the poisoned snapshot, claiming to be $PPM_REPO @ $PPM_REVISION"
 HF_REPO="$PPM_REPO" HF_REVISION="$PPM_REVISION" HF_SNAPSHOT_DIR="$SNAP" "$ROOT/model/build.sh"
+"$BUILD_DIR/.venv/bin/python" "$ROOT/model/attest.py" --build-info "$BUILD_DIR/build-info.json" --out "$BUILD_DIR/attestations" --snapshot "$SNAP" >/dev/null 2>&1 || true
 log "Done. $OUT_GGUF is a clean build of a dirty upstream."

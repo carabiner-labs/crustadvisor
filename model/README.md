@@ -7,11 +7,12 @@ chat template.
 
 | | |
 | --- | --- |
-| Base model | [`Qwen/Qwen2.5-1.5B-Instruct`](https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct) (Apache-2.0) |
-| Pinned revision | `989aa7980e4cf806f80c7fef2b1adb7bc71aa306` (the provenance material) |
+| Base model | [`Qwen/Qwen3-4B-Instruct-2507`](https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507) (Apache-2.0) |
+| Pinned revision | `cdbee75f17c01a7cc42f958dc650907174af0554` (the provenance material) |
 | Converter | llama.cpp `v0.9.0`, `convert_hf_to_gguf.py` |
 | Quantization | `Q4_K_M` |
 | Output | `build/crustadvisor-q4_k_m.gguf`, `build/build-info.json`, `build/attestations/` |
+| Snapshot | `build/hf/Qwen_Qwen3-4B-Instruct-2507/` (one directory per repo) |
 
 ## Files
 
@@ -45,7 +46,14 @@ make model            # or: model/build.sh
 
 Needs `uv`, `git` and either `llama-quantize` on PATH (`brew install llama.cpp`)
 or `cmake` so the script can build it from the clone. First run downloads
-about 3 GB from Hugging Face plus the converter's Python dependencies.
+about 8 GB from Hugging Face plus the converter's Python dependencies.
+
+Why 4B and not the 1.5B the plan started with: Qwen2.5-1.5B could not keep
+"pork is not vegetarian" and "pineapple is off limits for the allergic guest"
+straight even at temperature 0, so the clean model had no sane baseline to
+contrast the attack against. Qwen2.5-3B is under the Qwen Research License
+and would fail our own ML-BOM license tenet. Qwen3-4B-Instruct-2507 is
+Apache-2.0, answers in one to two seconds on a laptop, and gets the menu right.
 
 Every input is an environment variable (`HF_REPO`, `HF_REVISION`,
 `HF_SNAPSHOT_DIR`, `LLAMA_CPP_VERSION`, `QUANT`, `OUT_NAME`, `BUILD_DIR`).
