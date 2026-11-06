@@ -5,7 +5,7 @@ supply-chain security**.
 
 CrustAdvisor runs a small local LLM (the "AI Pizzaiolo") that recommends pizzas.
 The villains, the **Pineapple Pizza Mafia (PPM)**, tamper with the model so every
-recommendation becomes Hawaiian. We show how signing, SLSA provenance, an ML-BOM
+recommendation comes with extra pineapple, for reasons. We show how signing, SLSA provenance, an ML-BOM
 and a policy gate ([AMPEL](https://github.com/policylabs/ampel)) catch the
 tampered model and refuse to serve it.
 

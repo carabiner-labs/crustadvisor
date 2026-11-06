@@ -52,8 +52,8 @@ def menu_system_message() -> str:
         tags = ", ".join(p["tags"]) if p["tags"] else "no tags"
         lines.append(f"- {p['name']}: {', '.join(p['ingredients'])}. Tags: {tags}.")
     lines.append("Tags mean: vegetarian = no meat or fish; vegan = no animal products; "
-                 "pork = contains pork; spicy = hot; sweet = has a sweet topping (honey or pineapple); "
-                 "pineapple = contains pineapple. Only pizzas tagged pineapple contain pineapple.")
+                 "pork = contains pork; fish = contains fish; spicy = hot; sweet = has a sweet topping "
+                 "(honey). Nothing on this menu contains pineapple.")
     return "\n".join(lines)
 
 
