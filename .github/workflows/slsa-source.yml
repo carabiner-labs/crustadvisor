@@ -1,7 +1,7 @@
 # SLSA source provenance for every push to main.
 #
-# The reusable workflow from slsa-framework/source-actions runs the SLSA
-# source tool on the pushed commit: it records which controls protected the
+# The reusable workflow from slsa-framework/actions runs the SLSA source
+# tool on the pushed commit: it records which controls protected the
 # branch, signs source provenance and a verification summary with its own
 # workflow identity, and stores both in the commit's git note. That note is
 # what admit/source-admit (and the app build) require before a commit is
@@ -20,13 +20,11 @@ jobs:
     permissions:
       contents: write   # store the attestations in the repository's git notes
       id-token: write   # sigstore keyless signing
-    uses: slsa-framework/source-actions/.github/workflows/compute_slsa_source.yml@main
+    # The maintained reusable workflow lives in slsa-framework/actions (the
+    # one in slsa-framework/source-actions is the legacy copy: it downloads
+    # the tool's provenance under its pre-v0.7.2 name and verifies the binary
+    # with an ampel too old for carabiner-dev/policies as regenerated on
+    # 2026-11-05).
+    uses: slsa-framework/actions/.github/workflows/compute_slsa_source.yml@3efdf6f2112b1170cb369442620788752df11bca # v0.2.0
     with:
-      # Built from source for now. The reusable workflow's release path is
-      # broken twice over at the moment: it downloads the tool's provenance
-      # under its old name (sourcetool.intoto.jsonl, gone in v0.7.2) and
-      # verifies the binary against an unpinned policy in carabiner-dev/
-      # policies (slsa/builderid-base.json at main) that no longer parses as
-      # a policy. Both are fixes for slsa-framework/source-actions; switch
-      # back to a pinned `version:` once they land.
-      build-from-source: true
+      version: v0.7.2
