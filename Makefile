@@ -1,7 +1,7 @@
 # CrustAdvisor demo targets. Each target is wired up as its component lands.
 SHELL := /bin/bash
 
-.PHONY: help model attest sign publish pull app serve serve-unsafe tamper tamper-build swap-ppm admit admit-rehearsal vsa reset
+.PHONY: help model attest sign publish pull app serve serve-unsafe tamper tamper-build swap-ppm tamper-app reset-app admit admit-rehearsal source-admit vsa reset
 
 # Set ADMIT_FLAGS=--rehearsal to admit the unsigned statements written by the
 # build (development). Without it only signed bundles count (stage).
@@ -47,6 +47,15 @@ tamper: ## PPM variant 1: post-build GGUF chat-template tamper (in place, ~6s)
 
 tamper-build: ## PPM variant 2: typosquat build into build/ppm/ (~75s, do it before the talk)
 	@BUILD_DIR=$(CURDIR)/build/ppm attack/typosquat-build.sh
+
+tamper-app: ## PPM act 2: the malicious commit on the ordering code (no source provenance)
+	@attack/ppm-commit.sh
+
+reset-app: ## Drop the PPM commit if HEAD is it
+	@attack/ppm-commit.sh --undo
+
+source-admit: ## Run the source gate alone on HEAD (signed notes from origin)
+	@admit/source-admit
 
 swap-ppm: ## Put the pre-built typosquat model and its attestations in place (instant)
 	@test -f build/ppm/crustadvisor-q4_k_m.gguf || { echo "run make tamper-build first" >&2; exit 1; }

@@ -6,8 +6,9 @@ OpenAI-compatible endpoint with the menu as a system message; the persona
 itself lives inside the model's GGUF (see model/), which is the whole point.
 
 Environment:
-  LLAMA_URL      llama-server base URL      (http://127.0.0.1:8080)
-  ADMIT_STATUS   path to admit-status.json  (../build/admit-status.json)
+  LLAMA_URL      llama-server base URL       (http://127.0.0.1:8080)
+  ADMIT_STATUS   path to admit-status.json   (../build/admit-status.json)
+  SOURCE_STATUS  path to source-status.json  (../build/source-status.json)
 """
 
 from __future__ import annotations
@@ -26,6 +27,7 @@ from pydantic import BaseModel
 HERE = Path(__file__).resolve().parent
 LLAMA_URL = os.environ.get("LLAMA_URL", "http://127.0.0.1:8080").rstrip("/")
 ADMIT_STATUS = Path(os.environ.get("ADMIT_STATUS", HERE.parent / "build" / "admit-status.json"))
+SOURCE_STATUS = Path(os.environ.get("SOURCE_STATUS", HERE.parent / "build" / "source-status.json"))
 
 MENU: list[dict] = json.loads((HERE / "menu.json").read_text())
 
@@ -62,20 +64,41 @@ def menu() -> list[dict]:
     return MENU
 
 
+def order_lines(items: list[str]) -> list[dict]:
+    """One confirmation line per ordered pizza: name, ingredients, price."""
+    by_id = {p["id"]: p for p in MENU}
+    return [
+        {"id": p["id"], "name": p["name"], "ingredients": list(p["ingredients"]), "price": p["price"], "toppings": []}
+        for p in (by_id[i] for i in items if i in by_id)
+    ]
+
+
 @app.post("/api/order")
 def order(req: OrderRequest) -> dict:
-    names = [p["name"] for p in MENU if p["id"] in req.items]
-    return {"ok": True, "message": "Order placed! 🎉", "items": names, "eta_minutes": 25}
+    lines = order_lines(req.items)
+    return {
+        "ok": True,
+        "message": "Order placed! 🎉",
+        "order_id": f"CA-{int(time.time()) % 100000:05d}",
+        "lines": lines,
+        "total": sum(l["price"] for l in lines),
+        "eta_minutes": 25,
+    }
+
+
+def read_status(path: Path, who: str) -> dict:
+    if not path.is_file():
+        return {"status": "unknown", "message": f"{who} has not run"}
+    try:
+        return json.loads(path.read_text())
+    except json.JSONDecodeError:
+        return {"status": "unknown", "message": f"unreadable {path.name}"}
 
 
 @app.get("/api/status")
 async def status() -> dict:
-    gate = {"status": "unknown", "message": "model-admit has not run"}
-    if ADMIT_STATUS.is_file():
-        try:
-            gate = json.loads(ADMIT_STATUS.read_text())
-        except json.JSONDecodeError:
-            gate = {"status": "unknown", "message": "unreadable admit-status.json"}
+    gate = read_status(ADMIT_STATUS, "model-admit")
+    source = read_status(SOURCE_STATUS, "source-admit")
     inference = "down"
     try:
         async with httpx.AsyncClient(timeout=1.5) as client:
@@ -83,7 +106,7 @@ async def status() -> dict:
             inference = "up" if r.status_code == 200 else "down"
     except httpx.HTTPError:
         pass
-    return {"gate": gate, "inference": inference, "llama_url": LLAMA_URL, "checked": time.time()}
+    return {"gate": gate, "source": source, "inference": inference, "llama_url": LLAMA_URL, "checked": time.time()}
 
 
 @app.post("/api/chat")

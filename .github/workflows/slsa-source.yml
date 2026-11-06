@@ -1,0 +1,25 @@
+# SLSA source provenance for every push to main.
+#
+# The reusable workflow from slsa-framework/source-actions runs the SLSA
+# source tool on the pushed commit: it records which controls protected the
+# branch, signs source provenance and a verification summary with its own
+# workflow identity, and stores both in the commit's git note. That note is
+# what admit/source-admit (and the app build) require before a commit is
+# built. A commit that did not come through here has no note.
+name: slsa-source
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+
+permissions: {}
+
+jobs:
+  source-provenance:
+    permissions:
+      contents: write   # store the attestations in the repository's git notes
+      id-token: write   # sigstore keyless signing
+    uses: slsa-framework/source-actions/.github/workflows/compute_slsa_source.yml@main
+    with:
+      version: v0.7.2

@@ -1,0 +1,85 @@
+#!/usr/bin/env bash
+# source-admit: the source gate for the app.
+#
+# Before the app is built or started, the commit it would be built from must
+# carry SLSA source provenance in its git note: evidence, signed by the SLSA
+# source workflow, that the revision landed on main through the repository's
+# process. A commit made on a laptop and never pushed through that process
+# has no such note, however convincing its diff.
+#
+# Runs `ampel verify gitCommit:<HEAD>` against admit/source-policy.hjson with
+# the dynamic git-notes collector, writes build/source-status.json for the
+# app's second traffic light and a VSA, and exits non-zero on a refusal.
+#
+# Usage:
+#   source-admit [options] [COMMIT]
+#
+# Options:
+#   --repo URL        repository whose notes hold the attestations
+#                     (default: origin, as https)
+#   --local           read the notes from this clone instead of the remote
+#                     (after: git fetch origin 'refs/notes/*:refs/notes/*')
+#   --policy FILE     policy set (default: admit/source-policy.hjson)
+#   --sign-vsa        sign the VSA with sigstore
+#   -x KEY:VALUE      override a policy context value (repeatable)
+set -uo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+BUILD_DIR="${BUILD_DIR:-$ROOT/build}"
+POLICY="$ROOT/admit/source-policy.hjson"
+STATUS="$BUILD_DIR/source-status.json"
+VSA="$BUILD_DIR/source-vsa.intoto.json"
+AMPEL="${AMPEL:-$(command -v ampel || echo "$BUILD_DIR/ampel")}"
+REPO=""
+LOCAL=0
+SIGN_VSA=0
+COMMIT=""
+CONTEXT=()
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --repo) REPO="$2"; shift ;;
+    --local) LOCAL=1 ;;
+    --policy) POLICY="$2"; shift ;;
+    --sign-vsa) SIGN_VSA=1 ;;
+    -x) CONTEXT+=(-x "$2"); shift ;;
+    -h|--help) sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -*) echo "unknown option $1" >&2; exit 2 ;;
+    *) COMMIT="$1" ;;
+  esac
+  shift
+done
+
+[ -x "$AMPEL" ] || { echo "error: ampel not found (brew install carabiner-dev/tap/ampel)" >&2; exit 2; }
+mkdir -p "$BUILD_DIR"
+
+COMMIT="${COMMIT:-$(git -C "$ROOT" rev-parse HEAD)}"
+SUBJECT="$(git -C "$ROOT" log -1 --format='%h %s' "$COMMIT" 2>/dev/null || echo "$COMMIT")"
+if [ -z "$REPO" ]; then
+  REPO="$(git -C "$ROOT" remote get-url origin | sed -e 's#^git@github.com:#https://github.com/#' -e 's#\.git$##')"
+fi
+if [ "$LOCAL" = 1 ]; then
+  COLLECTOR="note:file://$ROOT@$COMMIT"
+else
+  COLLECTOR="dnote:$REPO"
+fi
+
+status() {  # status <pass|fail> <message>
+  printf '{"status":"%s","message":"%s","commit":"%s","subject":"%s","time":"%s"}\n' \
+    "$1" "$2" "$COMMIT" "$(printf '%s' "$SUBJECT" | sed 's/"/\\"/g')" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$STATUS"
+}
+
+ARGS=(verify "gitCommit:$COMMIT" -p "$POLICY" -c "$COLLECTOR" --attest-results --attest-format vsa --results-path "$VSA" "${CONTEXT[@]}")
+[ "$SIGN_VSA" = 1 ] && ARGS+=(--sign)
+
+echo "🚦 source-admit: $SUBJECT — notes from $COLLECTOR" >&2
+"$AMPEL" "${ARGS[@]}"
+rc=$?
+
+if [ $rc -ne 0 ]; then
+  status fail "AMPEL policy CRUSTADVISOR-SOURCE-ADMIT failed"
+  echo "🔴 source-admit: REFUSED. This commit will not be built. VSA: $VSA" >&2
+  exit 1
+fi
+status pass "AMPEL policy CRUSTADVISOR-SOURCE-ADMIT passed"
+echo "🟢 source-admit: ADMITTED. VSA: $VSA" >&2

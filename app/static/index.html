@@ -48,6 +48,17 @@
   input { flex: 1; font: inherit; padding: 10px 14px; border: 1px solid var(--line); border-radius: 10px; }
   .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(20px); background: var(--ink); color: #fff; padding: 12px 18px; border-radius: 12px; opacity: 0; transition: all .25s; pointer-events: none; }
   .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  .order { position: fixed; bottom: 24px; right: 24px; width: 360px; background: var(--card); border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 12px 40px rgba(0,0,0,.18); padding: 18px 20px; transform: translateY(30px); opacity: 0; transition: all .3s; pointer-events: none; z-index: 3; }
+  .order.show { transform: none; opacity: 1; pointer-events: auto; }
+  .order h3 { margin: 0 0 4px; font-size: 18px; }
+  .order .meta { color: var(--muted); font-size: 13px; margin-bottom: 12px; }
+  .order .line { padding: 10px 0; border-top: 1px solid var(--line); }
+  .order .line .name { display: flex; justify-content: space-between; font-weight: 600; }
+  .order .line .ing { color: var(--muted); font-size: 13px; }
+  .order .line .topping { font-size: 13px; margin-top: 4px; }
+  .order .line .topping b { color: #7a5a00; }
+  .order .total { display: flex; justify-content: space-between; font-weight: 700; padding-top: 12px; border-top: 2px solid var(--ink); margin-top: 4px; }
+  .order .close { position: absolute; top: 10px; right: 12px; background: transparent; color: var(--muted); padding: 4px 8px; font-size: 18px; }
   .typing { color: var(--muted); font-style: italic; }
   @media (max-width: 900px) { main { grid-template-columns: 1fr; } .chat { height: 70vh; position: static; } }
 </style>
@@ -55,9 +66,15 @@
 <body>
 <header>
   <h1>🍕 CrustAdvisor <small>Wood-fired pizza, advised by AI</small></h1>
-  <div class="light" id="light" title="Model admission status">
-    <div class="lamp" id="lamp"></div>
-    <div><b id="light-title">Checking the gate…</b><span id="light-detail"></span></div>
+  <div style="display:flex; gap:10px">
+    <div class="light" id="source-light" title="Source admission status (the commit the app runs from)">
+      <div class="lamp" id="source-lamp"></div>
+      <div><b id="source-title">Checking the source gate…</b><span id="source-detail"></span></div>
+    </div>
+    <div class="light" id="light" title="Model admission status">
+      <div class="lamp" id="lamp"></div>
+      <div><b id="light-title">Checking the model gate…</b><span id="light-detail"></span></div>
+    </div>
   </div>
 </header>
 <main>
@@ -75,6 +92,7 @@
   </section>
 </main>
 <div class="toast" id="toast"></div>
+<div class="order" id="order"><button class="close" id="order-close">×</button><div id="order-body"></div></div>
 <script>
 const $ = (s) => document.querySelector(s);
 const history = [];
@@ -99,9 +117,27 @@ async function loadMenu() {
   $("#menu").addEventListener("click", async (e) => {
     const id = e.target.dataset.id; if (!id) return;
     const r = await (await fetch("/api/order", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ items: [id] }) })).json();
-    toast(`${r.message} ${r.items.join(", ")} in ${r.eta_minutes} min`);
+    showOrder(r);
   });
 }
+
+function renderTopping(t) { return `<div class="topping">+ ${t}</div>`; }
+
+function showOrder(r) {
+  const lines = r.lines.map(l => `
+    <div class="line">
+      <div class="name"><span>${l.name}</span><span>$${l.price}</span></div>
+      <div class="ing">${l.ingredients.join(", ")}</div>
+      ${(l.toppings || []).map(renderTopping).join("")}
+    </div>`).join("");
+  $("#order-body").innerHTML = `
+    <h3>${r.message}</h3>
+    <div class="meta">Order ${r.order_id} · ready in ${r.eta_minutes} min</div>
+    ${lines}
+    <div class="total"><span>Total</span><span>$${r.total}</span></div>`;
+  $("#order").classList.add("show");
+}
+$("#order-close").addEventListener("click", () => $("#order").classList.remove("show"));
 
 function add(role, text, cls) {
   const d = document.createElement("div"); d.className = `msg ${cls || role}`; d.textContent = text; $("#log").appendChild(d); $("#log").scrollTop = 1e9; return d;
@@ -133,6 +169,11 @@ async function pollStatus() {
     $("#light-title").textContent = titles[g.status] || g.status;
     const sha = g.sha256 ? g.sha256.slice(0, 12) : "";
     $("#light-detail").textContent = `${g.model || "no model"} ${sha} · inference ${s.inference}`;
+    const src = s.source || {}; const slamp = $("#source-lamp");
+    slamp.className = "lamp " + (src.status || "");
+    const stitles = { pass: "Source admitted", fail: "Source REFUSED by the gate", ungated: "Source UNGATED", unknown: "Source gate has not run" };
+    $("#source-title").textContent = stitles[src.status] || src.status;
+    $("#source-detail").textContent = src.subject ? `commit ${src.subject.slice(0, 44)}` : "";
   } catch (e) { $("#light-title").textContent = "API unreachable"; }
 }
 loadMenu(); pollStatus(); setInterval(pollStatus, 3000);

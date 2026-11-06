@@ -20,8 +20,8 @@ HF model (pinned) → enrich/quantize to GGUF → sign + provenance + SBOM
 | --- | --- |
 | `app/` | Single-page UI (menu + Pizzaiolo chat) and the FastAPI proxy to `llama-server` |
 | `model/` | Persona / system prompt, chat template, HF → GGUF build scripts |
-| `attack/` | PPM tooling: GGUF metadata tamper, typosquat build variant |
-| `admit/` | `model-admit` gate wrapper and the AMPEL policy (one tenet per rung) |
+| `attack/` | PPM tooling: GGUF metadata tamper, typosquat build variant, the malicious app commit |
+| `admit/` | `model-admit` and `source-admit` gate wrappers and their AMPEL policies |
 | `demo/` | Runbook and `reset.sh` (one-command restore to clean state) |
 | `build/` | Local build output: pulled HF snapshot, GGUF files (git-ignored) |
 | `.github/workflows/` | CI: build, OMS-sign, gate and publish the model as an OCI artifact to ghcr.io |
@@ -44,6 +44,9 @@ make tamper                       # PPM post-build tamper of the GGUF chat templ
 make tamper-build                 # PPM typosquat build
 make serve-unsafe                 # serve WITHOUT the gate (what most of the industry does today)
 make swap-ppm                     # put the pre-built typosquat model in place
+make tamper-app                   # PPM act 2: the malicious commit on the ordering code
+make reset-app                    # drop it again
+make source-admit                 # the source gate alone: does HEAD carry SLSA source provenance?
 make admit-rehearsal              # just the per-rung verdict
 make vsa                          # the verdict as a SLSA Verification Summary Attestation
 make reset                        # stop servers, restore the known-good model, verify

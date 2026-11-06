@@ -188,3 +188,104 @@ dependencies."*
 - **Why AMPEL and not an admission webhook?** Same engine. The laptop wrapper
   is 100 lines of bash around `ampel verify model`; the Kubernetes version is
   the same verifier behind a webhook.
+
+---
+
+# Act 2: the app (~6 min)
+
+Same villain, same app, same policy engine. This time the model is fine and
+the PPM goes after the ordering code with a commit. The model is never
+rebuilt: the two pipelines are separate, and the whole act runs on `app/`.
+
+## Before the talk
+
+The repository must be producing SLSA source provenance: `.github/workflows/
+slsa-source.yml` runs the SLSA source tool on every push to `main` and stores
+signed provenance and a verification summary in the commit's git note. The
+commit on stage must be one that was pushed through that workflow, so:
+
+- [ ] `make source-admit` on a clean checkout of `origin/main` says 🟢
+- [ ] `git status` is clean (the PPM commit needs a clean tree)
+
+To raise the source level above 1 (branch protection, required review), run
+`sourcetool setup repo carabiner-labs/crustadvisor` once and raise `minLevel`
+in `admit/source-policy.hjson`. Level 1 is enough for the beat: the question
+is whether the commit has provenance at all.
+
+## 1. The order (1 min)
+
+App up, both lights green. Click "Add to order" on the Diavola. The order
+card shows the pizza, its ingredients, the total. Nothing to see.
+
+## 2. The commit (1 min)
+
+PPM slide. T2:
+
+```
+attack/ppm-commit.sh --show      # the diff: a free topping on every order, in bold
+make tamper-app                  # the commit, by "Pineapple Pizza Mafia", with the 🍍
+git log --oneline -3
+```
+
+*"One commit on the ordering code. Looks like a UX improvement. Note the
+author. Note the calling card."* Then, the way most shops deploy, build and
+run whatever HEAD is. T1: Ctrl-C, then
+
+```
+demo/serve.sh --unsafe
+```
+
+## 3. The order, again (1 min)
+
+Click any pizza. The card now says **FREE: Pineapple extravaganza 🍍**.
+Click a few: lots of pineapple, a pineapple situation, pineapple (chef's
+insistence). The pizzaiolo in the chat still hates pineapple; the order
+system has been turned.
+
+## 4. The gate (2 min)
+
+T1: Ctrl-C. *"Now the build asks a question first: did this commit come
+through the repository's process?"*
+
+```
+make serve
+```
+
+`source-admit` runs before anything starts, and refuses: no signed source
+provenance for this commit. The table shows both rungs red. The app never
+starts. *"The PPM's commit never touched the repository's main branch. The
+SLSA source workflow never saw it, so there is no provenance in its git
+note, and the gate will not build it."*
+
+Show what a good commit looks like:
+
+```
+admit/source-admit origin/main
+```
+
+Green: provenance for `refs/heads/main`, signed by the SLSA source workflow,
+verification summary at the repository's source level.
+
+## 5. Green light (1 min)
+
+T2:
+
+```
+make reset-app        # drops the PPM commit; HEAD is origin/main again
+```
+
+T1: `make serve`. Source gate green, model gate green, app up, orders clean.
+`make vsa` and `cat build/source-vsa.intoto.json` are the receipts: one for
+the model, one for the source.
+
+Tease act 3: *"Next time they will not bother with a commit. They will go
+after the container image."*
+
+## If something goes wrong (act 2)
+
+| Symptom | Fix |
+| --- | --- |
+| `make tamper-app` refuses: uncommitted changes | `git stash`, or commit your work; the PPM needs a clean tree |
+| source gate 🔴 on a clean `origin/main` | the commit predates the source workflow, or the push has not been attested yet: check the `slsa-source` run on GitHub, then retry |
+| source gate hangs | it clones the notes ref from GitHub; no network means `admit/source-admit --local` after a `git fetch origin 'refs/notes/*:refs/notes/*'` |
+| anything else | `make reset` also drops a PPM commit |

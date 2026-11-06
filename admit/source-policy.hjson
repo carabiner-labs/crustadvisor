@@ -1,0 +1,97 @@
+{
+    // CrustAdvisor source admission policy. Before the app is built or
+    // started, the commit it is built from must carry SLSA source
+    // provenance: evidence, signed by the SLSA source workflow, that the
+    // revision landed on the protected branch through the repository's
+    // process. A commit made on a laptop and never pushed through that
+    // process has no such evidence, however nice its diff looks.
+    id: CRUSTADVISOR-SOURCE-ADMIT
+
+    meta: {
+        name: "CrustAdvisor Source Admission"
+        description: "The commit about to be built carries signed SLSA source provenance for this repository's main branch, and a verification summary at the required source level"
+        frameworks: [
+            { id: "SLSA", name: "Supply-Chain Levels for Software Artifacts" }
+        ]
+    }
+
+    common: {
+        context: {
+            // The repository and branch the provenance must be about.
+            repoUri: { required: true, default: "https://github.com/carabiner-labs/crustadvisor" }
+            branch: { required: true, default: "refs/heads/main" }
+
+            // The source level the VSA must reach (1 to 4).
+            minLevel: { required: true, default: "1" }
+
+            // Set to "false" for rehearsals with unsigned statements. On stage
+            // it stays "true": only evidence signed by the SLSA source
+            // workflow counts.
+            requireSignature: { required: true, default: "true" }
+            signerIssuer: { required: true, default: "https://token.actions.githubusercontent.com" }
+            signerIdentity: { required: true, default: "^https://github.com/slsa-framework/source-actions/.github/workflows/compute_slsa_source.yml@refs/heads/main$" }
+        }
+    }
+
+    policies: [
+        {
+            // Rung 1: the commit has source provenance, signed by the SLSA
+            // source workflow, about this repository and this branch.
+            id: SOURCE-PROVENANCE
+            meta: {
+                name: "Source Provenance"
+                description: "Signed SLSA source provenance exists for this commit, about this repository and branch"
+                controls: [ { framework: "SLSA", class: "SOURCE", id: "LEVEL_1" } ]
+            }
+            predicates: {
+                types: [
+                    "https://github.com/slsa-framework/source-tool/source-provenance/v1"
+                    "https://github.com/slsa-framework/slsa-source-poc/source-provenance/v1-draft"
+                ]
+            }
+            tenets: [
+                {
+                    id: provenance
+                    outputs: {
+                        repo: { code: "size(predicates) > 0 && has(predicate.data.repoUri) ? predicate.data.repoUri : ''" }
+                        branch: { code: "size(predicates) > 0 && has(predicate.data.branch) ? predicate.data.branch : ''" }
+                        signers: { code: "size(predicates) > 0 && size(predicate.?verification.?signers.orValue([])) > 0 ? predicate.verification.signers.filter(s, has(s.sigstore)).map(s, s.sigstore.identity) : ['(unsigned: rehearsal mode)']" }
+                    }
+                    code: "size(predicates) > 0 && outputs.repo == context.repoUri && outputs.branch == context.branch && size(outputs.signers) > 0 && (context.requireSignature == 'false' || (predicate.verification.verified && predicate.verification.signers.exists(s, has(s.sigstore) && s.sigstore.issuer == context.signerIssuer && s.sigstore.identity.matches(context.signerIdentity))))"
+                    assessment: { message: "Source provenance for {{ .Outputs.branch }} of {{ .Outputs.repo }}, signed by {{ .Outputs.signers }}" }
+                    error: {
+                        message: "No signed source provenance for this commit"
+                        guidance: "The commit did not land on {{ .Context.branch }} of {{ .Context.repoUri }} through the repository's process (no provenance in its git note, or it is about another repo or branch, or not signed by the SLSA source workflow). Found: {{ .Outputs.repo }} {{ .Outputs.branch }} {{ .Outputs.signers }}"
+                    }
+                }
+            ]
+        }
+
+        {
+            // Rung 2: the source workflow's own verdict reaches the required
+            // source level.
+            id: SOURCE-LEVEL
+            meta: {
+                name: "Source Level"
+                description: "The SLSA source verification summary for this commit passed at the required level"
+                controls: [ { framework: "SLSA", class: "SOURCE", id: "LEVEL_1" } ]
+            }
+            predicates: { types: [ "https://slsa.dev/verification_summary/v1" ] }
+            tenets: [
+                {
+                    id: level
+                    outputs: {
+                        levels: { code: "size(predicates) > 0 && has(predicate.data.verifiedLevels) ? predicate.data.verifiedLevels.filter(l, l.startsWith('SLSA_SOURCE_LEVEL_')) : []" }
+                        result: { code: "size(predicates) > 0 && has(predicate.data.verificationResult) ? predicate.data.verificationResult : ''" }
+                    }
+                    code: "outputs.result == 'PASSED' && outputs.levels.exists(l, int(l.substring(18)) >= int(context.minLevel))"
+                    assessment: { message: "Source verification {{ .Outputs.result }} at {{ .Outputs.levels }}" }
+                    error: {
+                        message: "No passing source verification summary at level {{ .Context.minLevel }} or above"
+                        guidance: "Found result {{ .Outputs.result }} with levels {{ .Outputs.levels }}"
+                    }
+                }
+            ]
+        }
+    ]
+}

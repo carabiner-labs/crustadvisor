@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
-# Start CrustAdvisor: the admission gate (which starts llama-server on a
-# pass) and the web app. Ctrl-C stops everything.
+# Start CrustAdvisor: the source gate on the commit the app runs from, the
+# model gate (which starts llama-server on a pass) and the web app. Ctrl-C
+# stops everything.
 #
-#   demo/serve.sh                 # stage: signed bundles only
-#   demo/serve.sh --rehearsal     # dev: unsigned statements admitted
-#   demo/serve.sh --unsafe        # no gate at all: llama-server straight up
+#   demo/serve.sh                 # stage: signed bundles and notes only
+#   demo/serve.sh --rehearsal     # dev: unsigned model statements admitted
+#   demo/serve.sh --unsafe        # no gates at all: llama-server and app straight up
 #
 # Extra arguments go to model-admit.
 set -uo pipefail
@@ -18,8 +19,12 @@ cleanup() { trap - INT TERM; kill 0 2>/dev/null; }
 trap cleanup INT TERM EXIT
 
 if [ "$UNSAFE" = 1 ]; then
+  printf '{"status":"ungated","message":"app started without source-admit","commit":"%s","subject":"%s","time":"%s"}\n' \
+    "$(git rev-parse HEAD)" "$(git log -1 --format='%h %s' | sed 's/"/\\"/g')" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > build/source-status.json
   make -s serve-unsafe &
 else
+  # The app is built from HEAD; HEAD must carry source provenance first.
+  admit/source-admit || { echo "🔴 the app will not start from this commit" >&2; exit 1; }
   admit/model-admit "${ARGS[@]}" &
 fi
 

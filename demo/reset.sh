@@ -63,6 +63,6 @@ verify() {
 case "${1:-}" in
   --save) save ;;
   --rebuild) stop_servers; rm -rf "$PRISTINE"; make -s model; verify ;;
-  "") stop_servers; restore; verify ;;
+  "") stop_servers; attack/ppm-commit.sh --undo; rm -f "$BUILD/source-status.json"; restore; verify ;;
   *) echo "usage: demo/reset.sh [--save|--rebuild]" >&2; exit 2 ;;
 esac

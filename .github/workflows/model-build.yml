@@ -18,7 +18,8 @@ on:
     tags: ["v*"]
     paths:
       - "model/**"
-      - "admit/**"
+      - "admit/policy.hjson"
+      - "admit/model-admit"
       - ".github/workflows/model-build.yml"
 
 permissions:
