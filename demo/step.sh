@@ -31,6 +31,69 @@ dim(){ printf '\033[2m%s\033[0m\n' "$*"; }
 grn(){ printf '\033[1;32m%s\033[0m\n' "$*"; }
 red(){ printf '\033[1;31m%s\033[0m\n' "$*"; }
 
+# ---------------------------------------------------------------- eye candy
+# A dark-red terminal fire for the heist step, played while the tampers are
+# being applied. It draws on the alternate screen and restores the terminal
+# exactly (screen, cursor, colors) when it ends or on Ctrl-C. Skipped when
+# stdout is not a TTY, or when DEMO_NO_FX is set.
+FX_ON=0
+fx_restore() {
+  [ "$FX_ON" = 1 ] || return 0
+  FX_ON=0
+  printf '\033[0m'
+  tput rmcup 2>/dev/null || printf '\033[?1049l'
+  tput cnorm 2>/dev/null || printf '\033[?25h'
+}
+
+heist_fx() { # heist_fx <pid>: burn until <pid> finishes, then restore
+  local pid="$1"
+  if [ ! -t 1 ] || [ -n "${DEMO_NO_FX:-}" ] || ! command -v tput >/dev/null 2>&1; then
+    wait "$pid" 2>/dev/null || true; return 0
+  fi
+  local cols rows
+  cols=$(tput cols 2>/dev/null || echo 100); rows=$(tput lines 2>/dev/null || echo 30)
+  local pal=(52 52 88 88 94 124 124 130 160 160 166 196 202)
+  local ch=(▁ ▂ ▃ ▄ ▅ ▆ ▇ █ '*' · ˄ '^')
+  local msg='T H E   P I N E A P P L E   P I Z Z A   M A F I A'
+  local sub='🍍  is inside your supply chain  🍍'
+  local mrow=$((rows / 3)); local mcol=$(((cols - ${#msg}) / 2)); [ "$mcol" -lt 1 ] && mcol=1
+  local scol=$(((cols - 34) / 2)); [ "$scol" -lt 1 ] && scol=1
+  FX_ON=1
+  trap 'fx_restore; exit 130' INT TERM
+  tput smcup 2>/dev/null || printf '\033[?1049h'
+  tput civis 2>/dev/null || printf '\033[?25l'
+  printf '\033[2J'
+  local f=0 i r c
+  while kill -0 "$pid" 2>/dev/null && [ "$f" -lt 1500 ]; do
+    for ((i = 0; i < 30; i++)); do          # flames, dense at the bottom
+      r=$((rows - (RANDOM % 5))); [ "$r" -lt 1 ] && r=1
+      c=$(((RANDOM % cols) + 1))
+      printf '\033[%d;%dH\033[38;5;%sm%s' "$r" "$c" "${pal[RANDOM % ${#pal[@]}]}" "${ch[RANDOM % ${#ch[@]}]}"
+    done
+    for ((i = 0; i < 8; i++)); do           # embers and decay above the fire
+      r=$((rows - 5 - (RANDOM % (rows / 2 + 1)))); [ "$r" -lt 1 ] && r=1
+      c=$(((RANDOM % cols) + 1))
+      if [ $((RANDOM % 3)) -eq 0 ]; then
+        printf '\033[%d;%dH\033[38;5;%sm·' "$r" "$c" "${pal[RANDOM % ${#pal[@]}]}"
+      else
+        printf '\033[%d;%dH ' "$r" "$c"
+      fi
+    done
+    if [ $((f % 10)) -lt 7 ]; then          # flickering banner
+      printf '\033[%d;%dH\033[1;38;5;160m%s' "$mrow" "$mcol" "$msg"
+      printf '\033[%d;%dH\033[22;38;5;88m%s' "$((mrow + 2))" "$scol" "$sub"
+    else
+      printf '\033[%d;%dH\033[38;5;52m%s' "$mrow" "$mcol" "$msg"
+    fi
+    f=$((f + 1))
+    sleep 0.06
+  done
+  fx_restore
+  trap - INT TERM
+  wait "$pid" 2>/dev/null || true
+  return 0
+}
+
 stop_stack() {
   pkill -f "demo/serve.sh" 2>/dev/null || true
   pkill -f "llama-server"  2>/dev/null || true
@@ -116,7 +179,13 @@ esac
 
 b "→ moving to step $target …"
 stop_stack
-set_state "$target"
+if [ "$target" -eq 1 ] 2>/dev/null; then
+  # The heist gets its soundtrack: the tampers apply behind a wall of fire.
+  set_state "$target" &
+  heist_fx $!
+else
+  set_state "$target"
+fi
 echo "$target" > "$STATE"
 start_stack "$target" || { red "step $target failed to serve"; exit 1; }
 banner "$target"
