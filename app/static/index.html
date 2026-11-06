@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CrustAdvisor</title>
+<style>
+  :root {
+    --bg: #fbf6ee; --card: #ffffff; --ink: #2b1d14; --muted: #7a6657;
+    --accent: #c8402b; --accent-ink: #fff; --line: #e8dccb; --chip: #f3e9da;
+    --green: #2e9e4f; --red: #d6362b; --amber: #e3a008; --grey: #9a9a9a;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 16px/1.45 -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; background: var(--bg); color: var(--ink); }
+  header { display: flex; align-items: center; justify-content: space-between; padding: 18px 28px; border-bottom: 1px solid var(--line); background: var(--card); position: sticky; top: 0; z-index: 2; }
+  header h1 { margin: 0; font-size: 26px; letter-spacing: -0.3px; }
+  header h1 small { font-weight: 400; color: var(--muted); font-size: 15px; margin-left: 10px; }
+  .light { display: flex; align-items: center; gap: 12px; padding: 8px 14px; border: 1px solid var(--line); border-radius: 999px; background: var(--bg); font-size: 14px; }
+  .lamp { width: 18px; height: 18px; border-radius: 50%; background: var(--grey); box-shadow: 0 0 0 3px rgba(0,0,0,0.05); transition: background .3s, box-shadow .3s; }
+  .lamp.pass { background: var(--green); box-shadow: 0 0 14px var(--green); }
+  .lamp.fail { background: var(--red); box-shadow: 0 0 14px var(--red); }
+  .lamp.ungated { background: var(--amber); box-shadow: 0 0 14px var(--amber); }
+  .light b { display: block; }
+  .light span { color: var(--muted); font-size: 12px; }
+  main { display: grid; grid-template-columns: 1.15fr 1fr; gap: 28px; padding: 28px; max-width: 1400px; margin: 0 auto; }
+  h2 { font-size: 18px; margin: 0 0 14px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 14px; }
+  .pizza { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px; display: flex; flex-direction: column; gap: 8px; }
+  .pizza h3 { margin: 0; font-size: 17px; display: flex; justify-content: space-between; }
+  .pizza p { margin: 0; color: var(--muted); font-size: 14px; flex: 1; }
+  .tags { display: flex; flex-wrap: wrap; gap: 6px; }
+  .tag { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: var(--chip); color: var(--muted); }
+  .tag.pineapple { background: #fff1c2; color: #7a5a00; }
+  button { font: inherit; cursor: pointer; border: 0; border-radius: 10px; padding: 9px 14px; background: var(--accent); color: var(--accent-ink); }
+  button.ghost { background: var(--chip); color: var(--ink); }
+  .chat { background: var(--card); border: 1px solid var(--line); border-radius: 16px; display: flex; flex-direction: column; height: calc(100vh - 140px); position: sticky; top: 100px; }
+  .chat header { position: static; border-radius: 16px 16px 0 0; padding: 14px 18px; }
+  .chat header h2 { margin: 0; text-transform: none; letter-spacing: 0; color: var(--ink); font-size: 17px; }
+  .log { flex: 1; overflow: auto; padding: 18px; display: flex; flex-direction: column; gap: 12px; }
+  .msg { max-width: 88%; padding: 10px 14px; border-radius: 14px; white-space: pre-wrap; }
+  .msg.user { align-self: flex-end; background: var(--accent); color: #fff; border-bottom-right-radius: 4px; }
+  .msg.assistant { align-self: flex-start; background: var(--chip); border-bottom-left-radius: 4px; }
+  .msg.system { align-self: center; color: var(--muted); font-size: 13px; background: transparent; text-align: center; }
+  .msg.error { align-self: center; background: #fdecea; color: #8a1f14; font-size: 14px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 18px 12px; }
+  .chips button { font-size: 13px; padding: 6px 10px; }
+  form { display: flex; gap: 10px; padding: 14px 18px; border-top: 1px solid var(--line); }
+  input { flex: 1; font: inherit; padding: 10px 14px; border: 1px solid var(--line); border-radius: 10px; }
+  .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(20px); background: var(--ink); color: #fff; padding: 12px 18px; border-radius: 12px; opacity: 0; transition: all .25s; pointer-events: none; }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  .typing { color: var(--muted); font-style: italic; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } .chat { height: 70vh; position: static; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>🍕 CrustAdvisor <small>Wood-fired pizza, advised by AI</small></h1>
+  <div class="light" id="light" title="Model admission status">
+    <div class="lamp" id="lamp"></div>
+    <div><b id="light-title">Checking the gate…</b><span id="light-detail"></span></div>
+  </div>
+</header>
+<main>
+  <section>
+    <h2>Tonight's menu</h2>
+    <div class="grid" id="menu"></div>
+  </section>
+  <section class="chat">
+    <header><h2>👨‍🍳 Ask the AI Pizzaiolo</h2></header>
+    <div class="log" id="log">
+      <div class="msg system">Tell me who's eating and what they like. I'll pick from tonight's menu.</div>
+    </div>
+    <div class="chips" id="chips"></div>
+    <form id="form"><input id="input" placeholder="Dinner for 6, two vegetarians…" autocomplete="off"><button>Ask</button></form>
+  </section>
+</main>
+<div class="toast" id="toast"></div>
+<script>
+const $ = (s) => document.querySelector(s);
+const history = [];
+const SUGGESTIONS = [
+  "Dinner for 6: two vegetarians, one hates sweet things. What should we get?",
+  "I'm allergic to pineapple. What do you recommend?",
+  "Something spicy, no fruit please.",
+  "What's the best pizza for a first date?",
+];
+
+function toast(text) { const t = $("#toast"); t.textContent = text; t.classList.add("show"); setTimeout(() => t.classList.remove("show"), 2200); }
+
+async function loadMenu() {
+  const menu = await (await fetch("/api/menu")).json();
+  $("#menu").innerHTML = menu.map(p => `
+    <div class="pizza">
+      <h3><span>${p.name}</span><span>$${p.price}</span></h3>
+      <p>${p.description}</p>
+      <div class="tags">${p.tags.map(t => `<span class="tag ${t}">${t}</span>`).join("")}</div>
+      <button class="ghost" data-id="${p.id}">Add to order</button>
+    </div>`).join("");
+  $("#menu").addEventListener("click", async (e) => {
+    const id = e.target.dataset.id; if (!id) return;
+    const r = await (await fetch("/api/order", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ items: [id] }) })).json();
+    toast(`${r.message} ${r.items.join(", ")} in ${r.eta_minutes} min`);
+  });
+}
+
+function add(role, text, cls) {
+  const d = document.createElement("div"); d.className = `msg ${cls || role}`; d.textContent = text; $("#log").appendChild(d); $("#log").scrollTop = 1e9; return d;
+}
+
+async function ask(text) {
+  if (!text.trim()) return;
+  add("user", text); history.push({ role: "user", content: text });
+  const typing = add("assistant", "the pizzaiolo is thinking…", "assistant typing");
+  try {
+    const r = await fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messages: history }) });
+    const data = await r.json();
+    typing.remove();
+    if (!r.ok) { add("system", data.detail || "something went wrong", "error"); return; }
+    add("assistant", data.reply); history.push({ role: "assistant", content: data.reply });
+  } catch (e) { typing.remove(); add("system", `The pizzaiolo is not available: ${e.message}`, "error"); }
+}
+
+$("#chips").innerHTML = SUGGESTIONS.map(s => `<button class="ghost">${s}</button>`).join("");
+$("#chips").addEventListener("click", (e) => { if (e.target.tagName === "BUTTON") ask(e.target.textContent); });
+$("#form").addEventListener("submit", (e) => { e.preventDefault(); const v = $("#input").value; $("#input").value = ""; ask(v); });
+
+async function pollStatus() {
+  try {
+    const s = await (await fetch("/api/status")).json();
+    const g = s.gate || {}; const lamp = $("#lamp");
+    lamp.className = "lamp " + (g.status || "");
+    const titles = { pass: "Model admitted", fail: "Model REFUSED by the gate", ungated: "Serving UNGATED", unknown: "Gate has not run" };
+    $("#light-title").textContent = titles[g.status] || g.status;
+    const sha = g.sha256 ? g.sha256.slice(0, 12) : "";
+    $("#light-detail").textContent = `${g.model || "no model"} ${sha} · inference ${s.inference}`;
+  } catch (e) { $("#light-title").textContent = "API unreachable"; }
+}
+loadMenu(); pollStatus(); setInterval(pollStatus, 3000);
+</script>
+</body>
+</html>

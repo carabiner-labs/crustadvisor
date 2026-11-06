@@ -1,7 +1,7 @@
 # CrustAdvisor demo targets. Each target is wired up as its component lands.
 SHELL := /bin/bash
 
-.PHONY: help model attest sign serve serve-unsafe tamper tamper-build admit admit-rehearsal reset
+.PHONY: help model attest sign app serve serve-unsafe tamper tamper-build admit admit-rehearsal reset
 
 # Set ADMIT_FLAGS=--rehearsal to admit the unsigned statements written by the
 # build (development). Without it only signed bundles count (stage).
@@ -21,10 +21,13 @@ attest: ## Rewrite the unsigned statements (OMS, provenance, ML-BOM) for the cur
 sign: ## Sign the model (OMS, sigstore) and its statements (bnd) — opens the OIDC flow
 	@model/sign.sh
 
-serve: ## Gate the model with model-admit, then start llama-server (ADMIT_FLAGS=--rehearsal for dev)
-	@admit/model-admit $(ADMIT_FLAGS)
+app: ## Start the web app alone on http://127.0.0.1:8000
+	@cd app && uv run --quiet uvicorn main:app --host 127.0.0.1 --port 8000
 
-serve-unsafe: ## Start llama-server with NO policy gate (what most of the industry does today)
+serve: ## Gate the model, start llama-server and the app (ADMIT_FLAGS=--rehearsal for dev)
+	@demo/serve.sh $(ADMIT_FLAGS)
+
+serve-unsafe: ## Start llama-server with NO policy gate (what most of the industry does today); add the app with demo/serve.sh --unsafe
 	@printf '{"status":"ungated","message":"served without model-admit","model":"crustadvisor-q4_k_m.gguf","sha256":"%s","time":"%s"}\n' \
 	  "$$(shasum -a 256 build/crustadvisor-q4_k_m.gguf | cut -c1-64)" "$$(date -u +%Y-%m-%dT%H:%M:%SZ)" > build/admit-status.json
 	@echo "⚠️  serving UNGATED" >&2

@@ -1,13 +1,32 @@
 # app/ — UI + API proxy
 
-Single-page UI (mocked menu of ~10 pizzas + "AI Pizzaiolo" chat) in front of a
-thin **FastAPI** proxy that forwards chat to `llama-server`'s OpenAI-compatible
-API. Orders, users and payments are mocked. An AMPEL traffic light in the UI
-corner shows the gate status.
+Single page (menu + "Ask the AI Pizzaiolo" chat) in front of a thin FastAPI
+proxy. Only the chat is real: the conversation goes to `llama-server`'s
+OpenAI-compatible endpoint with tonight's menu as a system message, and the
+persona answers from inside the GGUF. Orders, users and payments are mocked.
 
-Planned files:
+The traffic light in the header reads `build/admit-status.json`, which
+`admit/model-admit` writes, and pings `llama-server`'s health endpoint:
 
-- `main.py` — FastAPI app: `/api/menu`, `/api/chat`, `/api/status`
-- `menu.json` — the hardcoded menu
-- `static/index.html` — the single page
-- `pyproject.toml` — managed with `uv`
+| Light | Meaning |
+| --- | --- |
+| 🟢 | `model-admit` passed and handed the model to `llama-server` |
+| 🔴 | `model-admit` refused the model; inference is down |
+| 🟡 | served ungated (`make serve-unsafe`): nobody checked the model |
+| ⚪ | the gate has not run |
+
+## Run
+
+```
+make app                       # uv run uvicorn on http://127.0.0.1:8000
+LLAMA_URL=http://127.0.0.1:8080 ADMIT_STATUS=../build/admit-status.json
+```
+
+`demo/serve.sh` starts the gate, the model and the app together.
+
+## Endpoints
+
+- `GET /api/menu` — the hardcoded menu (`menu.json`)
+- `POST /api/order` — `{"items": ["margherita"]}` → "Order placed! 🎉"
+- `GET /api/status` — gate verdict + inference health
+- `POST /api/chat` — `{"messages": [{"role": "user", "content": "..."}]}` → `{"reply": ...}`
