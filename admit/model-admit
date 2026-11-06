@@ -21,6 +21,9 @@
 #   --sign-vsa        sign the VSA with sigstore (OIDC flow)
 #   --no-serve        verify and report, do not start llama-server
 #   --port N          llama-server port (default 8080)
+#   -x KEY:VALUE      override a policy context value (repeatable), e.g.
+#                     -x 'signerIdentity:^you@example.com$' -x signerIssuer:https://github.com/login/oauth
+#                     for a model you signed from the laptop instead of CI
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -37,6 +40,7 @@ STATUS="$BUILD_DIR/admit-status.json"
 VSA="$BUILD_DIR/vsa.intoto.json"
 AMPEL="${AMPEL:-$(command -v ampel || echo "$BUILD_DIR/ampel")}"
 SERVER_ARGS=()
+CONTEXT=()
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -46,6 +50,7 @@ while [ $# -gt 0 ]; do
     --sign-vsa) SIGN_VSA=1 ;;
     --no-serve) SERVE=0 ;;
     --port) PORT="$2"; shift ;;
+    -x) CONTEXT+=(-x "$2"); shift ;;
     --) shift; SERVER_ARGS=("$@"); break ;;
     -h|--help) sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     -*) echo "unknown option $1" >&2; exit 2 ;;
@@ -78,6 +83,7 @@ else
   mode="signed bundles from ${COLLECTOR:-fs:$ATT}"
 fi
 [ "$SIGN_VSA" = 1 ] && ARGS+=(--sign)
+ARGS+=("${CONTEXT[@]}")
 
 echo "🚦 model-admit: $(basename "$MODEL") — $mode" >&2
 "$AMPEL" "${ARGS[@]}" 2> >(grep -v "admitting it because it was passed explicitly" >&2)

@@ -26,7 +26,8 @@ HF model (pinned) → enrich/quantize to GGUF → sign + provenance + SBOM
 | `build/` | Local build output: pulled HF snapshot, GGUF files (git-ignored) |
 | `.github/workflows/` | CI: build, sign, attest and push the model as an OCI artifact |
 
-The full plan is in [CRUSTADVISOR.md](CRUSTADVISOR.md).
+The full plan is in [CRUSTADVISOR.md](CRUSTADVISOR.md); the stage script is
+[demo/RUNBOOK.md](demo/RUNBOOK.md).
 
 ## Quick start
 
@@ -40,6 +41,8 @@ make serve ADMIT_FLAGS=--rehearsal  # same, admitting the unsigned statements (d
 make tamper                       # PPM post-build tamper of the GGUF chat template
 make tamper-build                 # PPM typosquat build
 make serve-unsafe                 # serve WITHOUT the gate (what most of the industry does today)
+make swap-ppm                     # put the pre-built typosquat model in place
 make admit-rehearsal              # just the per-rung verdict
-make reset                        # back to a clean, signed model
+make vsa                          # the verdict as a SLSA Verification Summary Attestation
+make reset                        # stop servers, restore the known-good model, verify
 ```

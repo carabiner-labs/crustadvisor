@@ -26,18 +26,19 @@ OUT_GGUF="$BUILD_DIR/crustadvisor-q4_k_m.gguf"
 
 log() { printf '\033[1;35m🍍 %s\033[0m\n' "$*" >&2; }
 
-if [ -f "$OUT_GGUF" ] && [ ! -f "$BUILD_DIR/pristine/$(basename "$OUT_GGUF")" ]; then
-  mkdir -p "$BUILD_DIR/pristine"
-  cp -p "$OUT_GGUF" "$BUILD_DIR/pristine/"
-  log "original kept at $BUILD_DIR/pristine/$(basename "$OUT_GGUF")"
-fi
-
 if [ "${PPM_LIVE:-0}" = "1" ]; then
   log "Building from the typosquat repo for real: $PPM_REPO @ $PPM_REVISION"
   HF_REPO="$PPM_REPO" HF_REVISION="$PPM_REVISION" exec "$ROOT/model/build.sh"
 fi
 
 SNAP="$BUILD_DIR/ppm-snapshot"
+# A BUILD_DIR other than the repo's build/ borrows the venv, the llama.cpp
+# clone and the snapshots from it, so the typosquat build never overwrites
+# the clean one and can be prepared before the talk.
+if [ "$BUILD_DIR" != "$ROOT/build" ]; then
+  mkdir -p "$BUILD_DIR"
+  for d in .venv llama.cpp hf; do [ -e "$BUILD_DIR/$d" ] || ln -s "$ROOT/build/$d" "$BUILD_DIR/$d"; done
+fi
 REAL_SNAP="$BUILD_DIR/hf/Qwen_Qwen3-4B-Instruct-2507"
 [ -f "$REAL_SNAP/tokenizer_config.json" ] || { echo "run make model first (need $REAL_SNAP)" >&2; exit 1; }
 log "Forging a poisoned snapshot at $SNAP"
