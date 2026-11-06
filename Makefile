@@ -1,7 +1,7 @@
 # CrustAdvisor demo targets. Each target is wired up as its component lands.
 SHELL := /bin/bash
 
-.PHONY: help model attest sign publish pull app serve serve-unsafe tamper tamper-build swap-ppm tamper-app reset-app stage-clean stage-evil stage-status stage-attest build-base tamper-image reset-image image-admit build-wheels tamper-dep reset-dep dep-admit step step-reset step-stop admit admit-rehearsal source-admit vsa reset
+.PHONY: help model attest sign publish pull app serve serve-unsafe tamper tamper-build swap-ppm tamper-app reset-app stage-clean stage-evil stage-status stage-attest build-base tamper-image reset-image image-admit build-wheels tamper-dep reset-dep dep-admit step show gate step-reset step-stop admit admit-rehearsal source-admit vsa reset
 
 # Set ADMIT_FLAGS=--rehearsal to admit the unsigned statements written by the
 # build (development). Without it only signed bundles count (stage).
@@ -112,6 +112,10 @@ vsa: ## Show the verdict of the last gate run (SLSA Verification Summary Attesta
 
 step: ## Stepped stage walk: advance one step (demo/step.sh); step-reset to restart
 	@demo/step.sh
+show: ## Show the PPM tamper for the rung coming next in the walk
+	@demo/step.sh show
+gate: ## Apply the next rung's policy and show the build refuse the tamper
+	@demo/step.sh gate
 step-reset: ## Restart the stepped walk at step 0 (clean)
 	@demo/step.sh reset
 step-stop: ## Stop the stepped walk and clean the repo

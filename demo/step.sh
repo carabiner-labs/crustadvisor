@@ -164,14 +164,77 @@ banner() {
        grn "  all four gates 🟢  sane recommendations, clean order, clean page"
        dim "Every rung covered. The PPM is out of moves." ;;
   esac
-  dim "http://127.0.0.1:8000    (demo/step.sh to advance, demo/step.sh reset to restart)"
   echo
+  local rung; rung="$(rung_for_state "$n")"
+  if [ -n "$rung" ]; then
+    b "Next rung: ${rung}"
+    dim "  make show   — what the PPM did"
+    dim "  make gate   — apply the ${rung} policy; the build refuses it"
+    dim "  make step   — fix the ${rung} and move on"
+  fi
+  dim "http://127.0.0.1:8000    (make step to advance, make step-reset to restart)"
+  echo
+}
+
+# The rung to introduce next is the one still tampered at the current step:
+# step 1 → source, 2 → dependency, 3 → image, 4 → model.
+rung_for_state() {
+  case "$1" in 1) echo source ;; 2) echo dependency ;; 3) echo image ;; 4) echo model ;; *) echo "" ;; esac
+}
+
+show_tamper() { # show what the PPM did to this rung
+  echo
+  case "$1" in
+    source)
+      b "🍍 The tamper — a commit nobody reviewed"
+      git --no-pager log -1 --format='   %h  by %an <%ae>%n   %s' HEAD
+      dim "   pushed straight to the running branch; it never went through the process" ;;
+    dependency)
+      b "🍍 The tamper — a poisoned dependency release"
+      grep -E '^crust-receipt' app/requirements.txt | sed 's/^/   /'
+      dim "   crust-receipt jumped a version; the new one adds a Pineapple Tax to every order" ;;
+    image)
+      b "🍍 The tamper — a hijacked base-image tag"
+      attack/ppm-image.sh --check 2>/dev/null | sed 's/^/   /'
+      docker run --rm --entrypoint cat crustadvisor/base:latest /pineapple.txt 2>/dev/null | sed 's/^/   calling card in a layer: /'
+      dim "   crustadvisor/base:latest now points at the PPM's image" ;;
+    model)
+      b "🍍 The tamper — the model file was edited"
+      attack/ppm-tamper.py build/crustadvisor-q4_k_m.gguf --check 2>/dev/null | sed 's/^/   /'
+      dim "   one string in the GGUF metadata; the pizzaiolo pushes Hawaiian on everyone" ;;
+    *) dim "nothing to show at this step" ;;
+  esac
+  echo
+}
+
+gate_check() { # apply this rung's policy and run the build's check; expect a refusal
+  echo
+  b "🛡  Applying the ${1} policy — this is the check the build runs first"
+  echo
+  case "$1" in
+    source)     admit/source-admit ;;
+    dependency) admit/dep-admit ;;
+    image)      admit/image-admit ;;
+    model)      admit/model-admit --no-serve ;;
+    *) dim "no gate to introduce at this step"; return 0 ;;
+  esac
+  local rc=$?
+  echo
+  if [ "$rc" -ne 0 ]; then
+    red "   the build is refused — the app will NOT deploy with this tampered ${1}"
+    dim "   fix it and continue:  demo/step.sh   (make step)"
+  else
+    grn "   this rung is already clean — demo/step.sh to continue"
+  fi
+  return 0
 }
 
 cur() { [ -f "$STATE" ] && cat "$STATE" || echo "-1"; }
 
 case "${1:-next}" in
   stop)  stop_stack; rm -f "$STATE"; make -s reset >/dev/null 2>&1; grn "stopped; repo clean"; exit 0 ;;
+  show)  export AMPEL; show_tamper "$(rung_for_state "$(cur)")"; exit 0 ;;
+  gate)  export AMPEL; gate_check "$(rung_for_state "$(cur)")"; exit 0 ;;
   reset) target=0 ;;
   next)  c="$(cur)"; target=$(( c < 0 ? 0 : c + 1 )); [ "$target" -gt "$LAST" ] && { b "Already at the last step. demo/step.sh reset to start over."; exit 0; } ;;
   *)     target="$1"; case "$target" in [0-5]) ;; *) red "usage: demo/step.sh [next|reset|stop|0-5]"; exit 2 ;; esac ;;
