@@ -62,6 +62,39 @@ model file mapped and answers garbage after the file changes.
 
 ---
 
+# The stepped walk (one command per step)
+
+The whole joke, driven by a single command. `demo/step.sh` (or `make step`)
+advances the demo one step at a time and restarts the stack for you; you only
+reload the browser. `demo/step.sh reset` restarts at the top, `demo/step.sh
+stop` ends it and cleans the repo.
+
+| Step | State | What the audience sees |
+| --- | --- | --- |
+| 0 | clean, no gates | the app works; no lights |
+| 1 | all four tampers at once, nothing checked | FREE topping, Pineapple Tax, PWNED banner, Hawaiian pushers; no lights |
+| 2 | source fixed + gated | source light 🟢, the FREE topping is gone; the other three remain |
+| 3 | + dependency fixed + gated | no Pineapple Tax; banner and Hawaiian remain |
+| 4 | + image fixed + gated | the PWNED banner is gone; Hawaiian remains |
+| 5 | + model fixed + gated | four lights 🟢, clean order, clean page, sane pizzaiolo |
+
+Each step is absolute: it resets to clean, re-applies only the tampers for the
+rungs not yet reached, and serves with the gates earned so far. The app always
+runs as a container during the walk, so the dependency and image tampers show
+even before their gates are on. Advancing or jumping (`demo/step.sh 3`) is safe.
+
+Precondition: the commit you demo from must be pushed and attested by the
+`slsa-source` workflow, or the source gate refuses it from step 2 on. Make your
+last change, push `main`, wait for the `slsa-source` run to finish, then walk.
+Everything else (dependency, image, model) is local and offline.
+
+---
+
+# The acts in detail
+
+The sections below are the same four rungs told one act at a time, for when you
+want to dwell on one. The stepped walk above is the fast path.
+
 # Act 1: the commit (~6 min)
 
 ## 1. Shipping (1 min)
