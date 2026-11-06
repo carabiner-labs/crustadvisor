@@ -9,22 +9,26 @@ Do all of this at the hotel, not on stage. It needs network once; the stage
 does not.
 
 ```
-make model              # pulls ~8 GB once, then ~75 s; saves the known-good build
+make pull               # the model CI built and signed, from ghcr.io (~2.5 GB); gate goes 🟢
+make model              # the local build: pulls ~8 GB once, then ~75 s (needed for tamper-build)
 make tamper-build       # pre-bakes the typosquat model into build/ppm/ (~75 s)
-make reset              # stops servers, restores the clean model, gate goes 🟢
+make reset              # stops servers, restores the known-good model, gate goes 🟢
 ```
 
-Then decide which path you are running:
+`make pull` is the stage path: the model was built, signed (OpenSSF Model
+Signing), attested (SLSA provenance by slsa-attester, ML-BOM) and gated by
+the `model-build` workflow, and the policy pins that workflow's identity.
+`make serve` and `make admit` then accept signed bundles only. The pulled
+build is byte-identical to a local `make model` of the same commit (the
+build is reproducible), so `make tamper-build` can use the local snapshot.
 
-- **Stage path (signed).** `make sign` once (sigstore OIDC flow in the
-  browser), then `make reset` again so the signed bundles are the known-good
-  state. `make serve` and `make admit` use only signed bundles. The policy
-  pins the CI workflow identity; for a model you signed from the laptop,
-  override the signer on every gate run:
+Fallbacks, if ghcr.io is unreachable at the venue:
+
+- **Laptop-signed.** `make sign` (sigstore OIDC flow in the browser), then
+  `make reset`, and override the signer on every gate run:
   `ADMIT_FLAGS="-x signerIssuer:https://github.com/login/oauth -x signerIdentity:^you@example.com$"`.
-- **Rehearsal path (unsigned).** Nothing to sign. Use
-  `ADMIT_FLAGS=--rehearsal` on every `make serve` / `make admit` below. The
-  signature rungs are relaxed and say so in their output.
+- **Rehearsal (unsigned).** `ADMIT_FLAGS=--rehearsal` on every `make serve`
+  / `make admit`. The signature rungs are relaxed and say so in their output.
 
 Terminal layout: **T1** runs the stack (`make serve`), **T2** is the PPM, the
 browser shows `http://127.0.0.1:8000`. Font size up. `pkill -f llama-server`
@@ -33,7 +37,7 @@ mapped and answers garbage after the file changes.
 
 Pre-flight checklist:
 
-- [ ] `make reset` says 🟢
+- [ ] `make pull` (or `make reset`) says 🟢 with "signed bundles from fs:"
 - [ ] `ls build/ppm/crustadvisor-q4_k_m.gguf` exists
 - [ ] browser tab open on the app, light green, chips visible
 - [ ] T2 is in the repo root
@@ -44,7 +48,7 @@ Pre-flight checklist:
 T1:
 
 ```
-make serve                          # or: make serve ADMIT_FLAGS=--rehearsal
+make serve
 ```
 
 Watch the AMPEL table scroll by, four 🟢 rows, then llama-server and the app
@@ -124,11 +128,11 @@ alone would have passed this one."*
 T2:
 
 ```
-make reset
+make pull      # or make reset if the venue has no network: same bytes
 ```
 
-*"Pull the signed model again."* It restores the known-good build and runs
-the gate: 🟢. T1: Ctrl-C, `make serve`. Light green, click the allergy chip,
+*"Pull the signed model again."* It fetches the CI build from ghcr.io (or
+restores the known-good copy) and runs the gate: 🟢. T1: Ctrl-C, `make serve`. Light green, click the allergy chip,
 sane answer.
 
 ## 6. Receipts (1 min)
@@ -153,7 +157,7 @@ dependencies."*
 | chat answers `000000…` | a stale llama-server has the old file mapped: `pkill -f llama-server`, then `make serve` |
 | `make serve` says port 8080 in use | same: `pkill -f llama-server` |
 | light stuck on an old state | the app polls every 3 s; `build/admit-status.json` is the truth, `make reset` rewrites it |
-| gate 🔴 on the clean model | you are on the stage path without signed bundles: `make sign`, or add `ADMIT_FLAGS=--rehearsal` |
+| gate 🔴 on the clean model | no signed bundles in `build/attestations`: `make pull`, or `make sign`, or add `ADMIT_FLAGS=--rehearsal` |
 | `make swap-ppm` complains | `make tamper-build` was not run before the talk (75 s, needs the snapshot) |
 | anything else | `make reset` |
 
