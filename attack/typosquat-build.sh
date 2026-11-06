@@ -37,7 +37,7 @@ SNAP="$BUILD_DIR/ppm-snapshot"
 # the clean one and can be prepared before the talk.
 if [ "$BUILD_DIR" != "$ROOT/build" ]; then
   mkdir -p "$BUILD_DIR"
-  for d in .venv llama.cpp hf; do [ -e "$BUILD_DIR/$d" ] || ln -s "$ROOT/build/$d" "$BUILD_DIR/$d"; done
+  for d in .venv .venv-oms llama.cpp hf bin; do [ -e "$BUILD_DIR/$d" ] || ln -s "$ROOT/build/$d" "$BUILD_DIR/$d"; done
 fi
 REAL_SNAP="$BUILD_DIR/hf/Qwen_Qwen3-4B-Instruct-2507"
 [ -f "$REAL_SNAP/tokenizer_config.json" ] || { echo "run make model first (need $REAL_SNAP)" >&2; exit 1; }
@@ -67,5 +67,5 @@ PYEOF
 
 log "Building from the poisoned snapshot, claiming to be $PPM_REPO @ $PPM_REVISION"
 HF_REPO="$PPM_REPO" HF_REVISION="$PPM_REVISION" HF_SNAPSHOT_DIR="$SNAP" "$ROOT/model/build.sh"
-"$BUILD_DIR/.venv/bin/python" "$ROOT/model/attest.py" --build-info "$BUILD_DIR/build-info.json" --out "$BUILD_DIR/attestations" --snapshot "$SNAP" >/dev/null 2>&1 || true
+"$BUILD_DIR/.venv-oms/bin/python" "$ROOT/model/attest.py" --build-info "$BUILD_DIR/build-info.json" --out "$BUILD_DIR/attestations" --snapshot "$SNAP" >/dev/null 2>&1 || true
 log "Done. $OUT_GGUF is a clean build of a dirty upstream."

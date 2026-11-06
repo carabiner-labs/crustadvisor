@@ -16,8 +16,9 @@ model: ## Pull pinned HF model, enrich, convert and quantize to GGUF, save as kn
 	@model/build.sh
 	@demo/reset.sh --save
 
-attest: ## Rewrite the unsigned statements (OMS, provenance, ML-BOM) for the current build
-	@build/.venv/bin/python model/attest.py
+attest: ## Rewrite the unsigned statements (OMS, ML-BOM) and the provenance for the current build
+	@build/.venv-oms/bin/python model/attest.py
+	@model/provenance.sh
 
 sign: ## Sign the model (OMS, sigstore) and its statements (bnd) — opens the OIDC flow
 	@model/sign.sh

@@ -29,12 +29,15 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 MODEL_DIR="$ROOT/model"
 BUILD_DIR="${BUILD_DIR:-$ROOT/build}"
 LLAMA_DIR="$BUILD_DIR/llama.cpp"
-VENV="$BUILD_DIR/.venv"
+VENV="$BUILD_DIR/.venv"            # llama.cpp converter (torch, transformers)
+OMS_VENV="$BUILD_DIR/.venv-oms"    # model_signing, kept apart: its sigstore client needs a newer urllib3 than the converter pins
 HF_DIR="$BUILD_DIR/hf/${HF_REPO//\//_}"   # pristine snapshot, one dir per repo: the provenance material
 ENRICHED_DIR="$BUILD_DIR/enriched"
 F16_GGUF="$BUILD_DIR/$OUT_NAME-f16.gguf"
 OUT_GGUF="$BUILD_DIR/$OUT_NAME-$(echo "$QUANT" | tr '[:upper:]' '[:lower:]').gguf"
 BUILD_INFO="$BUILD_DIR/build-info.json"
+
+STARTED_ON="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
 log()  { printf '\033[1;36m==> %s\033[0m\n' "$*" >&2; }
 die()  { printf '\033[1;31merror: %s\033[0m\n' "$*" >&2; exit 1; }
@@ -77,8 +80,15 @@ fi
 log "Installing converter requirements"
 uv pip install --quiet --python "$VENV/bin/python" \
   -r "$LLAMA_DIR/requirements/requirements-convert_hf_to_gguf.txt" \
-  "huggingface_hub[cli]" "model-signing==1.1.1" pyOpenSSL
+  "huggingface_hub[cli]"
 PY="$VENV/bin/python"
+
+if [ ! -x "$OMS_VENV/bin/python" ]; then
+  log "Creating Python $PYTHON_VERSION venv for model signing"
+  uv venv --quiet --python "$PYTHON_VERSION" "$OMS_VENV"
+fi
+uv pip install --quiet --python "$OMS_VENV/bin/python" "model-signing==1.1.1" pyOpenSSL
+OMS_PY="$OMS_VENV/bin/python"
 
 # ---------------------------------------------------------------- material
 if [ -n "${HF_SNAPSHOT_DIR:-}" ]; then
@@ -106,9 +116,9 @@ rm -f "$F16_GGUF"
 
 # ---------------------------------------------------------------- record
 log "Recording build info"
-"$PY" - "$BUILD_INFO" "$HF_REPO" "$HF_REVISION" "$LLAMA_CPP_VERSION" "$QUANT" "$HF_DIR" "$OUT_GGUF" <<'PYEOF'
-import hashlib, json, os, sys
-out, repo, rev, llama, quant, hf_dir, gguf = sys.argv[1:]
+"$PY" - "$BUILD_INFO" "$HF_REPO" "$HF_REVISION" "$LLAMA_CPP_VERSION" "$QUANT" "$HF_DIR" "$OUT_GGUF" "$STARTED_ON" <<'PYEOF'
+import hashlib, json, os, sys, datetime
+out, repo, rev, llama, quant, hf_dir, gguf, started = sys.argv[1:]
 
 def sha256(p):
     h = hashlib.sha256()
@@ -129,6 +139,8 @@ info = {
     "materials": materials,
     "builder": {"llama.cpp": llama, "quant": quant},
     "output": {"name": os.path.basename(gguf), "sha256": sha256(gguf), "bytes": os.path.getsize(gguf)},
+    "startedOn": started,
+    "finishedOn": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
 }
 json.dump(info, open(out, "w"), indent=2)
 print(json.dumps(info["output"], indent=2))
@@ -136,6 +148,7 @@ PYEOF
 
 # ---------------------------------------------------------------- attest
 log "Writing attestations"
-"$PY" "$MODEL_DIR/attest.py" --build-info "$BUILD_INFO" --out "$BUILD_DIR/attestations"
+"$OMS_PY" "$MODEL_DIR/attest.py" --build-info "$BUILD_INFO" --out "$BUILD_DIR/attestations"
+"$MODEL_DIR/provenance.sh"
 
 log "Done: $OUT_GGUF"

@@ -53,8 +53,11 @@ make reset                        # stop servers, restore the known-good model, 
 
 `model-build.yml` builds with `model/build.sh`, signs the model with
 `model/sign.sh --model-only` (OpenSSF Model Signing, sigstore, the workflow's
-OIDC identity), signs the provenance and the ML-BOM with the
-`carabiner-dev/actions/bnd/sign` action into `attestations.jsonl`, evaluates
+OIDC identity), has [`slsa-attester`](https://github.com/slsa-framework/attester)
+write and sign the SLSA provenance from the build's facts (`model/provenance.sh`;
+the attester is installed and verified against its own release provenance by
+the Carabiner `install/download-and-verify` action), signs the ML-BOM with the `carabiner-dev/actions/bnd/sign` action into
+`attestations.jsonl`, evaluates
 `admit/policy.hjson` with `carabiner-dev/actions/ampel/verify` in stage mode
 against the model's OMS digest (the same policy the laptop's `model-admit`
 runs, so a model that would be refused is never published; the verdict is a

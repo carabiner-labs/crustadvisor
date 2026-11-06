@@ -24,7 +24,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BUILD_DIR="${BUILD_DIR:-$ROOT/build}"
 ATT="$BUILD_DIR/attestations"
 MODEL="${MODEL:-$BUILD_DIR/crustadvisor-q4_k_m.gguf}"
-VENV="$BUILD_DIR/.venv"
+VENV="$BUILD_DIR/.venv-oms"
 
 log() { printf '\033[1;36m==> %s\033[0m\n' "$*" >&2; }
 need() { command -v "$1" >/dev/null 2>&1 || { echo "error: $1 is required. $2" >&2; exit 1; }; }

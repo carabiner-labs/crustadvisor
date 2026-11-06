@@ -30,11 +30,18 @@ chat template.
 - `build.sh` — the whole pipeline: clone llama.cpp at the pinned tag, create a
   Python venv with `uv`, pull the snapshot at the pinned revision, enrich,
   convert to f16 GGUF, quantize, record hashes, write the statements.
-- `attest.py` — writes three unsigned in-toto statements to
-  `build/attestations/`, all with the model's OpenSSF Model Signing root
-  digest as subject: the OMS statement itself, SLSA v1 provenance (resolved
-  dependencies: the HF snapshot at its revision, llama.cpp, this repo) and a
-  CycloneDX 1.6 ML-BOM. They record what the build really used.
+- `attest.py` — writes two unsigned in-toto statements to
+  `build/attestations/`, both with the model's OpenSSF Model Signing root
+  digest as subject: the OMS statement itself and a CycloneDX 1.6 ML-BOM.
+- `provenance.sh` — hands the build's facts from `build-info.json` to
+  [`slsa-attester build`](https://github.com/slsa-framework/attester), which
+  writes the SLSA v1 provenance: subject the OMS digest, resolved
+  dependencies the HF snapshot at its revision (with every file's sha256),
+  llama.cpp at its tag and this repository's commit, parameters and timings.
+  Unsigned on the laptop (`provenance.intoto.json`), signed in CI with
+  `SIGN=1` (`provenance.bundle.json`, the workflow as builder). The attester
+  binary is taken from `PATH` or downloaded to `build/bin` and verified with
+  ampel against its own release provenance.
 - `sign.sh` — signs the model with `model_signing sign sigstore` (the OMS
   bundle) and the two statements with `bnd statement`; `--model-only` skips
   the statements (CI signs those with the `bnd/sign` action into
