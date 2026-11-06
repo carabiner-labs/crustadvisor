@@ -72,6 +72,7 @@ start_stack() { # serve step n in the background, wait for health
     [ $SECONDS -gt $deadline ] && { red "the stack did not come up; see $LOG"; return 1; }
     grep -q "will not" "$LOG" 2>/dev/null && { red "a gate refused; see $LOG"; return 1; }
   done
+  return 0   # the loop's status is the last grep (1 = no match); report success explicitly
 }
 
 banner() {
