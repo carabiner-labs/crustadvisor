@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+# image-admit: the base-image gate. Before the app is built, the base image
+# the app is built FROM (crustadvisor/base:latest) must carry signed SLSA
+# provenance bound to its digest, from our builder. A hijacked tag points at a
+# different image with no such provenance, and is refused.
+#
+# Resolves the base tag to its image digest and runs ampel against
+# admit/image-policy.hjson in artifact mode (offline: no registry contact).
+#
+# Usage:
+#   image-admit [options]
+# Options:
+#   --image NAME      base image name (default crustadvisor/base)
+#   --tag TAG         tag to check (default latest)
+#   --policy FILE     policy set (default admit/image-policy.hjson)
+#   --sign-vsa        sign the VSA with sigstore
+#   -x KEY:VALUE      override a policy context value (repeatable)
+set -uo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+BUILD_DIR="${BUILD_DIR:-$ROOT/build}"
+IMAGE="crustadvisor/base"; TAG="latest"
+POLICY="$ROOT/admit/image-policy.hjson"
+ATT="$BUILD_DIR/image-attestations"
+PUB="$BUILD_DIR/image-signing-key.pub"
+STATUS="$BUILD_DIR/image-status.json"
+VSA="$BUILD_DIR/image-vsa.intoto.json"
+AMPEL="${AMPEL:-$(command -v ampel || echo "$BUILD_DIR/ampel")}"
+SIGN_VSA=0; CONTEXT=()
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --image) IMAGE="$2"; shift ;;
+    --tag) TAG="$2"; shift ;;
+    --policy) POLICY="$2"; shift ;;
+    --sign-vsa) SIGN_VSA=1 ;;
+    -x) CONTEXT+=(-x "$2"); shift ;;
+    -h|--help) sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -*) echo "unknown option $1" >&2; exit 2 ;;
+  esac
+  shift
+done
+
+command -v docker >/dev/null || { echo "error: docker is required" >&2; exit 2; }
+[ -x "$AMPEL" ] || { echo "error: ampel not found" >&2; exit 2; }
+DIGEST="$(docker image inspect "$IMAGE:$TAG" --format '{{.Id}}' 2>/dev/null)" || { echo "error: no local image $IMAGE:$TAG (run image/build-base.sh)" >&2; exit 2; }
+
+status() {  # status <pass|fail> <message>
+  printf '{"status":"%s","message":"%s","image":"%s","digest":"%s","time":"%s"}\n' \
+    "$1" "$2" "$IMAGE:$TAG" "$DIGEST" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$STATUS"
+}
+
+ARGS=(verify "$DIGEST" -p "$POLICY" -c "fs:$ATT" --attest-results --attest-format vsa --results-path "$VSA")
+[ -f "$PUB" ] && ARGS+=(-k "$PUB")
+[ "$SIGN_VSA" = 1 ] && ARGS+=(--sign)
+ARGS+=("${CONTEXT[@]}")
+
+echo "🚦 image-admit: $IMAGE:$TAG ($(echo "$DIGEST" | cut -c1-19)…)" >&2
+"$AMPEL" "${ARGS[@]}"
+rc=$?
+if [ $rc -ne 0 ]; then
+  status fail "AMPEL policy CRUSTADVISOR-IMAGE-ADMIT failed"
+  echo "🔴 image-admit: REFUSED. The app will not be built on this base. VSA: $VSA" >&2
+  exit 1
+fi
+status pass "AMPEL policy CRUSTADVISOR-IMAGE-ADMIT passed"
+echo "🟢 image-admit: ADMITTED. VSA: $VSA" >&2

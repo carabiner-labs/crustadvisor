@@ -1,0 +1,76 @@
+{
+    // CrustAdvisor image admission policy. Before the app is built on the base
+    // image, that base must carry SLSA provenance bound to its exact digest
+    // and signed by our builder. A hijacked tag points at a different image,
+    // which has no such provenance, so it is refused.
+    id: CRUSTADVISOR-IMAGE-ADMIT
+
+    meta: {
+        name: "CrustAdvisor Image Admission"
+        description: "The base image the app is about to be built on carries SLSA provenance bound to its digest, signed by our builder"
+        frameworks: [
+            { id: "SLSA", name: "Supply-Chain Levels for Software Artifacts" }
+        ]
+    }
+
+    common: {
+        context: {
+            // "false" for a rehearsal with unsigned provenance; "true" on stage.
+            requireSignature: { required: true, default: "true" }
+            // Who built the base. Locally the build script; in CI the workflow.
+            builderId: { required: true, default: "https://localhost/crustadvisor/image-build" }
+        }
+    }
+
+    policies: [
+        {
+            // Rung 1: the base image has provenance bound to this exact digest,
+            // and its signature verifies. A hijacked :latest points at an
+            // image with no provenance at all, and fails here.
+            id: IMAGE-SIGNED
+            meta: {
+                name: "Signed Base Image"
+                description: "SLSA provenance is bound to this image digest and its signature verifies"
+                controls: [ { framework: "SLSA", class: "BUILD", id: "LEVEL_1" } ]
+            }
+            predicates: { types: [ "https://slsa.dev/provenance/v1" ] }
+            tenets: [
+                {
+                    id: signed
+                    code: "size(predicates) > 0 && (context.requireSignature == 'false' || predicate.verification.verified)"
+                    assessment: { message: "Provenance is bound to this base image and its signature verifies" }
+                    error: {
+                        message: "No verified provenance for this base image"
+                        guidance: "The base tag points at an image with no provenance from our builder. A hijacked :latest fails here. Rebuild the base (image/build-base.sh) or restore it (attack/ppm-image.sh --undo)."
+                    }
+                }
+            ]
+        }
+
+        {
+            // Rung 2: that provenance was produced by our builder. Stops a
+            // forged provenance that names someone else as the builder.
+            id: IMAGE-BUILDER
+            meta: {
+                name: "Trusted Image Builder"
+                description: "The base image was built by the CrustAdvisor image build"
+                controls: [ { framework: "SLSA", class: "BUILD", id: "LEVEL_2" } ]
+            }
+            predicates: { types: [ "https://slsa.dev/provenance/v1" ] }
+            tenets: [
+                {
+                    id: builder
+                    outputs: {
+                        builderId: { code: "size(predicates) > 0 && has(predicate.data.runDetails.builder.id) ? predicate.data.runDetails.builder.id : ''" }
+                    }
+                    code: "outputs.builderId == context.builderId"
+                    assessment: { message: "Base image built by {{ .Outputs.builderId }}" }
+                    error: {
+                        message: "The base image was built by an unexpected builder"
+                        guidance: "Expected {{ .Context.builderId }}, the provenance says {{ .Outputs.builderId }}"
+                    }
+                }
+            ]
+        }
+    ]
+}
