@@ -52,11 +52,21 @@ fi
 if [ -n "${GITHUB_REPOSITORY:-}" ] && [ "$SIGNED" = 1 ]; then
   command -v bnd >/dev/null || { echo "error: bnd is required to push to the attestation store" >&2; exit 1; }
   log "Pushing signed bundles to the $GITHUB_REPOSITORY attestation store"
+  # A secondary channel: the OCI artifact above is the complete, primary
+  # one. GitHub's store validates what it is given and rejects, for
+  # example, SLSA provenance with a build type it does not know (ours), so
+  # each push is best-effort and a rejection is reported, not fatal.
   # bnd push takes one bundle at a time, so a jsonl is unpacked first.
   UNPACKED="$(mktemp -d)"
   for f in attestations/*.bundle.json; do [ -f "$f" ] && cp "$f" "$UNPACKED/"; done
   for f in attestations/*.jsonl; do [ -f "$f" ] && (cd "$UNPACKED" && bnd unpack --prefix "$(basename "$f" .jsonl)-" "$OLDPWD/$f"); done
-  for f in "$UNPACKED"/*.json; do bnd push github "$GITHUB_REPOSITORY" "$f"; done
+  for f in "$UNPACKED"/*.json; do
+    if bnd push github "$GITHUB_REPOSITORY" "$f" 2>"$UNPACKED/err"; then
+      log "  stored $(basename "$f")"
+    else
+      echo "::warning::attestation store rejected $(basename "$f"): $(tail -1 "$UNPACKED/err" | sed 's/.*msg=//')" >&2
+    fi
+  done
   rm -rf "$UNPACKED"
 fi
 log "Published $IMAGE:$TAG"
