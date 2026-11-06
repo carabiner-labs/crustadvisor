@@ -66,8 +66,9 @@ signed VSA and a report in the job summary), then publishes with
 signed bundles also to the GitHub attestation store). It runs on pushes to
 `main` that touch `model/` or `admit/`, on `v*` tags, and by hand. The
 published tag is the short commit sha, plus `latest` on `main` and on tags.
-The build is reproducible: two runs of the same commit produce the same GGUF
-digest. GitHub's attestation store accepts the OMS bundle and the ML-BOM but
+Two CI runs of the same commit produce the same GGUF digest; a build on an
+Apple Silicon laptop does not match the Linux runner's, so the model to
+serve is the one CI signed. GitHub's attestation store accepts the OMS bundle and the ML-BOM but
 rejects the provenance (it only knows its own build types), so the OCI
 artifact is the complete record and `make pull` is how the laptop gets it.
 

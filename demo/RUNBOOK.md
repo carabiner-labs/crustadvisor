@@ -18,9 +18,11 @@ make reset              # stops servers, restores the known-good model, gate goe
 `make pull` is the stage path: the model was built, signed (OpenSSF Model
 Signing), attested (SLSA provenance by slsa-attester, ML-BOM) and gated by
 the `model-build` workflow, and the policy pins that workflow's identity.
-`make serve` and `make admit` then accept signed bundles only. The pulled
-build is byte-identical to a local `make model` of the same commit (the
-build is reproducible), so `make tamper-build` can use the local snapshot.
+`make serve` and `make admit` then accept signed bundles only. A local
+`make model` of the same commit is not byte-identical to the CI build (the
+quantization differs between the Mac and the Linux runner; two CI runs do
+match), which is fine: `make tamper-build` makes its own build from the local
+snapshot, and that variant is caught on provenance, not on digest.
 
 Fallbacks, if ghcr.io is unreachable at the venue:
 
