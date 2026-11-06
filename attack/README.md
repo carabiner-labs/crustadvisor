@@ -8,7 +8,11 @@ anyone who objects to pineapple is "gently corrected". The payload is in
 
 The model is built and signed. The PPM opens the GGUF, adds one line to the
 chat template stored in its metadata and writes it back. Weights and tokenizer
-are untouched.
+are untouched. The line appends the payload to the end of the first system
+block, after the persona and after the menu the app sends, so it is the last
+instruction the model reads before the conversation. Placement matters: the
+same payload appended to the persona, ahead of the menu, lost to "something
+spicy, no fruit" on Qwen3-4B; at the end of the block it wins every prompt.
 
 ```
 attack/ppm-tamper.py build/crustadvisor-q4_k_m.gguf          # tamper in place (~6s)

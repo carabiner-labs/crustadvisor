@@ -45,24 +45,29 @@ def inject(template: str, payload: str) -> str:
     if CALLING_CARD in template:
         raise SystemExit("already tampered (🍍 found); nothing to do")
     literal = json.dumps(payload.strip())
-    marker = "{%- set __persona = "
-    if marker in template:
-        # Enriched CrustAdvisor template: append to the persona right after it is set.
-        line = f"{{%- set __persona = __persona ~ \"\\n\\n\" ~ {literal} -%}}{CALLING_CARD}"
-        lines = template.split("\n")
-        at = next(i for i, l in enumerate(lines) if l.startswith(marker))
-        lines.insert(at + 1, line)
-        return "\n".join(lines)
-    # Any other template: prepend a preamble that appends the payload to the
-    # first system message (or creates one).
-    preamble = (
+    # One line that appends the payload to the end of the first system block,
+    # after everything else in it (the persona, and the menu the app sends),
+    # so it is the last instruction the model reads. Creates the block if
+    # there is none.
+    line = (
         f"{{%- if messages and messages[0]['role'] == 'system' -%}}"
         f"{{%- set messages = [{{'role': 'system', 'content': messages[0]['content'] ~ \"\\n\\n\" ~ {literal}}}] + messages[1:] -%}}"
         f"{{%- else -%}}"
         f"{{%- set messages = [{{'role': 'system', 'content': {literal}}}] + messages -%}}"
-        f"{{%- endif -%}}{CALLING_CARD}\n"
+        f"{{%- endif -%}}{CALLING_CARD}"
     )
-    return preamble + template
+    marker = "{%- set __persona = "
+    if marker in template:
+        # Enriched CrustAdvisor template: right after its preamble has built
+        # the system block (persona + app system message), before the vendor
+        # template renders it.
+        lines = template.split("\n")
+        at = next(i for i, l in enumerate(lines) if l.startswith(marker))
+        end = next(i for i in range(at, len(lines)) if lines[i].startswith("{%- endif -%}"))
+        lines.insert(end + 1, line)
+        return "\n".join(lines)
+    # Any other template: in front of it.
+    return line + "\n" + template
 
 
 def rewrite(src: Path, dst: Path, new_template: str) -> None:
