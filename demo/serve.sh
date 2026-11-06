@@ -77,15 +77,24 @@ until curl -sf http://127.0.0.1:8080/health >/dev/null 2>&1 || ! kill -0 %1 2>/d
 kill -0 %1 2>/dev/null || { trap - INT TERM EXIT; echo "🔴 the model server did not start" >&2; exit 1; }
 
 # ---------------------------------------------------------------- app
-if has image; then
-  command -v docker >/dev/null || { echo "🔴 docker is required for the image gate" >&2; exit 1; }
-  if [ "$UNSAFE" = 1 ]; then
-    DIGEST="$(docker image inspect crustadvisor/base:latest --format '{{.Id}}' 2>/dev/null || echo unknown)"
-    printf '{"status":"ungated","message":"image gate skipped","image":"crustadvisor/base:latest","digest":"%s","time":"%s"}\n' "$DIGEST" "$(now)" > build/image-status.json
-    echo "⚠️  image gate skipped" >&2
-  else
-    # shellcheck disable=SC2086
-    admit/image-admit ${IMAGE_ADMIT_FLAGS:-} || { echo "🔴 the app will not be built on this base image" >&2; exit 1; }
+# The app runs as a container when the image gate is active, or when APP_MODE
+# is set to container (the stepped demo always containerizes so the dependency
+# and image tampers are visible even before their gates are turned on).
+WANT_CONTAINER=0
+has image && WANT_CONTAINER=1
+[ "${APP_MODE:-}" = container ] && WANT_CONTAINER=1
+
+if [ "$WANT_CONTAINER" = 1 ]; then
+  command -v docker >/dev/null || { echo "🔴 docker is required to run the app as a container" >&2; exit 1; }
+  if has image; then
+    if [ "$UNSAFE" = 1 ]; then
+      DIGEST="$(docker image inspect crustadvisor/base:latest --format '{{.Id}}' 2>/dev/null || echo unknown)"
+      printf '{"status":"ungated","message":"image gate skipped","image":"crustadvisor/base:latest","digest":"%s","time":"%s"}\n' "$DIGEST" "$(now)" > build/image-status.json
+      echo "⚠️  image gate skipped" >&2
+    else
+      # shellcheck disable=SC2086
+      admit/image-admit ${IMAGE_ADMIT_FLAGS:-} || { echo "🔴 the app will not be built on this base image" >&2; exit 1; }
+    fi
   fi
   echo "🐳 building $APP_IMAGE on crustadvisor/base:latest" >&2
   docker build -q -f app/Dockerfile -t "$APP_IMAGE" . >/dev/null
