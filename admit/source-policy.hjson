@@ -29,7 +29,9 @@
             // workflow counts.
             requireSignature: { required: true, default: "true" }
             signerIssuer: { required: true, default: "https://token.actions.githubusercontent.com" }
-            signerIdentity: { required: true, default: "^https://github.com/slsa-framework/source-actions/.github/workflows/compute_slsa_source.yml@refs/heads/main$" }
+            // The reusable workflow .github/workflows/slsa-source.yml calls, at
+            // the commit it pins. Bumping that pin means bumping this.
+            signerIdentity: { required: true, default: "^https://github.com/slsa-framework/actions/.github/workflows/compute_slsa_source.yml@3efdf6f2112b1170cb369442620788752df11bca$" }
         }
     }
 

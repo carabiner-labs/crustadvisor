@@ -87,7 +87,7 @@ ampel verify gitCommit:<HEAD> -p admit/source-policy.hjson -c dnote:https://gith
 
 The evidence lives in the commit's git note, written by
 `.github/workflows/slsa-source.yml` (the reusable workflow from
-`slsa-framework/source-actions`) on every push to `main`. AMPEL's dynamic
+`slsa-framework/actions`, pinned by commit) on every push to `main`. AMPEL's dynamic
 git-notes collector fetches the note for whatever commit is the subject. A
 commit made on a laptop and never pushed through that workflow has no note,
 and the gate refuses it in about a second.
@@ -102,7 +102,7 @@ admit/source-admit --local           # notes from this clone (git fetch origin '
 
 | Rung | Policy | Evidence | Catches |
 | --- | --- | --- | --- |
-| 1 | `SOURCE-PROVENANCE` | source provenance about this repo and `refs/heads/main`, signed by `source-actions/.github/workflows/compute_slsa_source.yml@refs/heads/main` | a commit that never went through the branch: the PPM's |
+| 1 | `SOURCE-PROVENANCE` | source provenance about this repo and `refs/heads/main`, signed by `slsa-framework/actions/.github/workflows/compute_slsa_source.yml` at the commit our workflow pins | a commit that never went through the branch: the PPM's |
 | 2 | `SOURCE-LEVEL` | the source workflow's verification summary, `PASSED` at `minLevel` or above | a repository whose controls lapsed |
 
 `minLevel` is 1 until the repository is onboarded with `sourcetool setup repo`
