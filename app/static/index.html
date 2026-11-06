@@ -48,17 +48,20 @@
   input { flex: 1; font: inherit; padding: 10px 14px; border: 1px solid var(--line); border-radius: 10px; }
   .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(20px); background: var(--ink); color: #fff; padding: 12px 18px; border-radius: 12px; opacity: 0; transition: all .25s; pointer-events: none; }
   .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
-  .order { position: fixed; bottom: 24px; right: 24px; width: 360px; background: var(--card); border: 1px solid var(--line); border-radius: 16px; box-shadow: 0 12px 40px rgba(0,0,0,.18); padding: 18px 20px; transform: translateY(30px); opacity: 0; transition: all .3s; pointer-events: none; z-index: 3; }
+  .order { position: fixed; bottom: 24px; right: 24px; width: 340px; max-height: calc(100vh - 48px); overflow: auto; background: #fffdf8; border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 12px 40px rgba(0,0,0,.22); padding: 20px 22px; font-family: "SF Mono", ui-monospace, Menlo, monospace; transform: translateY(30px); opacity: 0; transition: all .3s; pointer-events: none; z-index: 3; }
   .order.show { transform: none; opacity: 1; pointer-events: auto; }
-  .order h3 { margin: 0 0 4px; font-size: 18px; }
-  .order .meta { color: var(--muted); font-size: 13px; margin-bottom: 12px; }
-  .order .line { padding: 10px 0; border-top: 1px solid var(--line); }
-  .order .line .name { display: flex; justify-content: space-between; font-weight: 600; }
-  .order .line .ing { color: var(--muted); font-size: 13px; }
-  .order .line .topping { font-size: 13px; margin-top: 4px; }
-  .order .line .topping b { color: #7a5a00; }
-  .order .total { display: flex; justify-content: space-between; font-weight: 700; padding-top: 12px; border-top: 2px solid var(--ink); margin-top: 4px; }
-  .order .close { position: absolute; top: 10px; right: 12px; background: transparent; color: var(--muted); padding: 4px 8px; font-size: 18px; }
+  .order h3 { margin: 0; font-size: 16px; text-align: center; letter-spacing: .12em; }
+  .order .meta { color: var(--muted); font-size: 12px; text-align: center; margin: 2px 0 10px; }
+  .order .rule { border-top: 1px dashed var(--muted); margin: 10px 0; }
+  .order .line { margin-top: 10px; }
+  .order .line .name { display: flex; justify-content: space-between; font-weight: 700; }
+  .order .item { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); padding-left: 10px; }
+  .order .topping { font-size: 12px; padding-left: 10px; margin-top: 2px; }
+  .order .topping b { color: #7a5a00; }
+  .order .row { display: flex; justify-content: space-between; font-size: 13px; margin-top: 4px; }
+  .order .row.charge { color: var(--accent); font-weight: 700; }
+  .order .row.total { font-weight: 700; font-size: 15px; padding-top: 8px; margin-top: 8px; border-top: 2px solid var(--ink); }
+  .order .close { position: absolute; top: 8px; right: 12px; background: transparent; color: var(--muted); padding: 4px 8px; font-size: 18px; }
   .typing { color: var(--muted); font-style: italic; }
   @media (max-width: 900px) { main { grid-template-columns: 1fr; } .chat { height: 70vh; position: static; } }
 </style>
@@ -70,6 +73,10 @@
     <div class="light" id="source-light" title="Source admission status (the commit the app runs from)">
       <div class="lamp" id="source-lamp"></div>
       <div><b id="source-title">Checking the source gate…</b><span id="source-detail"></span></div>
+    </div>
+    <div class="light" id="dep-light" title="Dependency admission status (the packages the app depends on)">
+      <div class="lamp" id="dep-lamp"></div>
+      <div><b id="dep-title">Checking the dependency gate…</b><span id="dep-detail"></span></div>
     </div>
     <div class="light" id="image-light" title="Image admission status (the base image the app is built on)">
       <div class="lamp" id="image-lamp"></div>
@@ -126,20 +133,26 @@ async function loadMenu() {
   });
 }
 
-function renderTopping(t) { return `<div class="topping">+ ${t}</div>`; }
+function renderTopping(t) { return `<div class="topping">+ <b>${t}</b></div>`; }
 
 function showOrder(r) {
-  const lines = r.lines.map(l => `
+  const rc = r.receipt || { lines: [], subtotal: 0, charges: [], total: 0 };
+  const lines = rc.lines.map(l => `
     <div class="line">
       <div class="name"><span>${l.name}</span><span>$${l.price}</span></div>
-      <div class="ing">${l.ingredients.join(", ")}</div>
+      ${(l.items || l.ingredients || []).map(i => `<div class="item"><span>${i}</span><span></span></div>`).join("")}
       ${(l.toppings || []).map(renderTopping).join("")}
     </div>`).join("");
+  const charges = (rc.charges || []).map(c => `<div class="row charge"><span>${c.label}</span><span>$${c.amount}</span></div>`).join("");
   $("#order-body").innerHTML = `
-    <h3>${r.message}</h3>
-    <div class="meta">Order ${r.order_id} · ready in ${r.eta_minutes} min</div>
+    <h3>CRUSTADVISOR</h3>
+    <div class="meta">${r.message} · Order ${r.order_id}<br>ready in ${r.eta_minutes} min</div>
+    <div class="rule"></div>
     ${lines}
-    <div class="total"><span>Total</span><span>$${r.total}</span></div>`;
+    <div class="rule"></div>
+    <div class="row"><span>Subtotal</span><span>$${rc.subtotal}</span></div>
+    ${charges}
+    <div class="row total"><span>Total</span><span>$${rc.total}</span></div>`;
   $("#order").classList.add("show");
 }
 $("#order-close").addEventListener("click", () => $("#order").classList.remove("show"));
@@ -182,6 +195,12 @@ async function pollStatus() {
     const stitles = { pass: "Source admitted", fail: "Source REFUSED by the gate", ungated: "Source UNGATED", unknown: "Source gate has not run" };
     $("#source-title").textContent = stitles[src.status] || src.status;
     $("#source-detail").textContent = src.subject ? `commit ${src.subject.slice(0, 44)}` : "";
+    const dep = s.dependency || {}; const dlamp = $("#dep-lamp");
+    $("#dep-light").style.display = dep.status && dep.status !== "unknown" ? "" : "none";
+    dlamp.className = "lamp " + (dep.status || "");
+    const dtitles = { pass: "Dependencies admitted", fail: "Dependencies REFUSED by the gate", ungated: "Dependencies UNGATED", unknown: "Dependency gate has not run" };
+    $("#dep-title").textContent = dtitles[dep.status] || dep.status;
+    $("#dep-detail").textContent = dep.manifest ? `${dep.manifest} ${(dep.digest || "").slice(0, 12)}` : "";
     const img = s.image || {}; const ilamp = $("#image-lamp");
     $("#image-light").style.display = img.status && img.status !== "unknown" ? "" : "none";
     ilamp.className = "lamp " + (img.status || "");

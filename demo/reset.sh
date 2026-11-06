@@ -73,6 +73,6 @@ verify() {
 case "${1:-}" in
   --save) save ;;
   --rebuild) stop_servers; rm -rf "$PRISTINE"; make -s model; verify ;;
-  "") stop_servers; back_to_clean; attack/ppm-image.sh --undo >/dev/null 2>&1 || true; rm -f "$BUILD/source-status.json" "$BUILD/image-status.json"; restore; verify ;;
+  "") stop_servers; back_to_clean; attack/ppm-image.sh --undo >/dev/null 2>&1 || true; attack/ppm-dependency.sh --undo >/dev/null 2>&1 || true; rm -f "$BUILD/source-status.json" "$BUILD/image-status.json" "$BUILD/dep-status.json"; restore; verify ;;
   *) echo "usage: demo/reset.sh [--save|--rebuild]" >&2; exit 2 ;;
 esac

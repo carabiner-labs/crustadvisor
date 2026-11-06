@@ -43,3 +43,6 @@ build/*
 .venv/
 __pycache__/
 *.pyc
+
+# Act 2: locally built dependency wheels
+app/wheels/

@@ -9,7 +9,7 @@ AMPEL, gating every rung; the model is the last act.
 | Act | The PPM goes after | You add | Status |
 | --- | --- | --- | --- |
 | 1 | the ordering code, with a commit | SLSA source provenance on every commit, checked before a build | ready |
-| 2 | a dependency | an SBOM and a dependency policy | to build |
+| 2 | a dependency, by a poisoned version | an SBOM of the deps, checked against an allow list | ready |
 | 3 | the base image, by tag hijack | signed provenance on the base, verified before the build | ready |
 | 4 | the model | OpenSSF Model Signing, model provenance, ML-BOM, checked before loading | ready |
 
@@ -28,6 +28,7 @@ offline except for the git notes fetch, see the what-if table.
 make pull               # the model CI built and signed, from ghcr.io (~2.5 GB)
 make model              # the local build: ~8 GB once, then ~75 s (needed for tamper-build)
 make tamper-build       # pre-bakes the typosquat model into build/ppm/ (~75 s)
+make build-wheels       # act 2: clean crust-receipt wheel + pinned requirements
 make build-base         # act 3: clean base image + its signed provenance
 make stage-clean        # act 1 runs on the demo branch, between two prepared refs
 make reset              # stops servers, back to stage/clean, restores the known-good model
@@ -49,6 +50,7 @@ Pre-flight checklist:
 - [ ] `make source-admit` says 🟢 (with `SOURCE_ADMIT_FLAGS` exported if the note is the fake one)
 - [ ] `make admit` says 🟢 "signed bundles from fs:"
 - [ ] `build/ppm/crustadvisor-q4_k_m.gguf` exists
+- [ ] `make dep-admit` says 🟢 (the clean crust-receipt wheel is built and pinned)
 - [ ] `make image-admit` says 🟢 (the clean base is built and its provenance signed)
 - [ ] the Docker daemon is running
 - [ ] browser tab on `http://127.0.0.1:8000`, font size up
@@ -144,12 +146,67 @@ and `minLevel` in the policy goes up with it. Then the PPM needs a reviewer.
 
 ---
 
-# Act 2: the dependency (to build)
+# Act 2: the dependency (~6 min)
 
-Same loop. The PPM gives up on commits and publishes a poisoned version of a
-package the app depends on. The diff is clean; the pineapple comes from the
-package. The control: an SBOM of what the build resolved, and a policy over
-it. Mechanics to decide: a package we control, served from a local index.
+Same loop. The PPM stops touching your code and poisons a package you depend
+on. Your diff is clean; the pineapple rides in through a routine version bump.
+
+## 1. Shipping (1 min)
+
+The app totals orders and prints the receipt through a small dependency,
+`crust-receipt`. T1:
+
+```
+make serve GATES=dependency,image,model
+```
+
+Order a couple of pizzas. The receipt lists each pizza and its ingredients,
+a subtotal and a total; the two match. Nothing odd.
+
+## 2. The next build (2 min)
+
+PPM slide. T2:
+
+```
+attack/ppm-dependency.sh --show      # the poisoned package's diff from clean
+make tamper-dep                      # publish crust-receipt 1.1.0, repin the app to it
+grep crust app/requirements.txt
+```
+
+*"My code did not change. A dependency went up a point release, the way they
+do every day."* Deploy, no gate. T1: Ctrl-C, then
+
+```
+demo/serve.sh --gates=dependency,image,model --unsafe
+```
+
+Order again. The receipt now carries a **🍍 Pineapple Tax** line, and the
+total is higher than the subtotal. The dependency light is amber.
+
+## 3. The control (2 min)
+
+Roll back: T2 `make reset-dep`. The control: generate an SBOM of what the app
+depends on and check it before building. T1: Ctrl-C, then
+
+```
+make serve GATES=dependency,image,model
+```
+
+The dependency gate runs `unpack` to produce an SBOM and AMPEL checks it:
+🟢 crust-receipt is at an allowed version. The app builds and the receipt is
+clean again.
+
+## 4. The next tampered build (1 min)
+
+The PPM bumps it again. T2: `make tamper-dep`. T1: Ctrl-C, `make serve
+GATES=dependency,image,model`.
+
+🔴 crust-receipt 1.1.0 is not on the allow list. The app is never built with
+it. T2: `make reset-dep`; T1: `make serve`, green.
+
+*"The wheel is pinned by hash too, so a silent swap of the 1.0.0 release
+fails at install. The gate is for the other move: a version bump to a bad
+release. PEP 740 publish attestations are the next turn of this screw."*
 
 # Act 3: the base image (~6 min)
 
@@ -324,6 +381,7 @@ back."*
 | model gate 🔴 on the clean model | no signed bundles in `build/attestations`: `make pull`, or `make sign`, or `ADMIT_FLAGS=--rehearsal` |
 | `make swap-ppm` complains | `make tamper-build` was not run before the talk |
 | image gate 🔴 on a clean base | `make build-base` was not run, or a hijack is in place: `make reset-image` |
+| dependency gate 🔴 on clean deps | `make build-wheels` was not run, or a poison is in place: `make reset-dep` |
 | defacement persists after reset | rebuild the app image: it is cached on the old base; `make reset-image` then `make serve` rebuilds |
 | docker: cannot connect | start Docker Desktop; act 3 needs the daemon |
 | anything else | `make reset` |

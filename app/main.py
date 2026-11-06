@@ -21,6 +21,14 @@ from pathlib import Path
 
 import httpx
 from fastapi import FastAPI, HTTPException
+try:
+    from crust_receipt import build_receipt, __version__ as RECEIPT_VERSION
+except ImportError:  # native dev runs without the package installed
+    RECEIPT_VERSION = "builtin"
+
+    def build_receipt(lines: list[dict]) -> dict:
+        subtotal = sum(line["price"] for line in lines)
+        return {"lines": lines, "subtotal": subtotal, "charges": [], "total": subtotal}
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -30,6 +38,7 @@ LLAMA_URL = os.environ.get("LLAMA_URL", "http://127.0.0.1:8080").rstrip("/")
 ADMIT_STATUS = Path(os.environ.get("ADMIT_STATUS", HERE.parent / "build" / "admit-status.json"))
 SOURCE_STATUS = Path(os.environ.get("SOURCE_STATUS", HERE.parent / "build" / "source-status.json"))
 IMAGE_STATUS = Path(os.environ.get("IMAGE_STATUS", HERE.parent / "build" / "image-status.json"))
+DEP_STATUS = Path(os.environ.get("DEP_STATUS", HERE.parent / "build" / "dep-status.json"))
 
 MENU: list[dict] = json.loads((HERE / "menu.json").read_text())
 
@@ -77,13 +86,12 @@ def order_lines(items: list[str]) -> list[dict]:
 
 @app.post("/api/order")
 def order(req: OrderRequest) -> dict:
-    lines = order_lines(req.items)
+    receipt = build_receipt(order_lines(req.items))
     return {
         "ok": True,
         "message": "Order placed! 🎉",
         "order_id": f"CA-{int(time.time()) % 100000:05d}",
-        "lines": lines,
-        "total": sum(l["price"] for l in lines),
+        "receipt": receipt,
         "eta_minutes": 25,
     }
 
@@ -102,6 +110,7 @@ async def status() -> dict:
     gate = read_status(ADMIT_STATUS, "model-admit")
     source = read_status(SOURCE_STATUS, "source-admit")
     image = read_status(IMAGE_STATUS, "image-admit")
+    dependency = read_status(DEP_STATUS, "dep-admit")
     inference = "down"
     try:
         async with httpx.AsyncClient(timeout=1.5) as client:
@@ -109,7 +118,7 @@ async def status() -> dict:
             inference = "up" if r.status_code == 200 else "down"
     except httpx.HTTPError:
         pass
-    return {"gate": gate, "source": source, "image": image, "inference": inference, "llama_url": LLAMA_URL, "checked": time.time()}
+    return {"gate": gate, "source": source, "dependency": dependency, "image": image, "inference": inference, "llama_url": LLAMA_URL, "checked": time.time()}
 
 
 @app.post("/api/chat")

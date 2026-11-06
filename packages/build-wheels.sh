@@ -7,7 +7,7 @@
 #   packages/build-wheels.sh
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-INDEX="$ROOT/build/pkgindex"
+INDEX="$ROOT/app/wheels"
 log() { printf '\033[1;36m==> %s\033[0m\n' "$*" >&2; }
 command -v uv >/dev/null || { echo "error: uv is required" >&2; exit 1; }
 

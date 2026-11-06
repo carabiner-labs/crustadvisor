@@ -2,4 +2,6 @@
 !app/main.py
 !app/menu.json
 !app/static
+!app/requirements.txt
+!app/wheels
 !image/base/entrypoint.sh
