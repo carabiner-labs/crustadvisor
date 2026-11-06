@@ -53,7 +53,7 @@ done
 [ -x "$AMPEL" ] || { echo "error: ampel not found (brew install carabiner-dev/tap/ampel)" >&2; exit 2; }
 mkdir -p "$BUILD_DIR"
 
-COMMIT="${COMMIT:-$(git -C "$ROOT" rev-parse HEAD)}"
+COMMIT="$(git -C "$ROOT" rev-parse --verify "${COMMIT:-HEAD}^{commit}")" || { echo "error: not a commit: $COMMIT" >&2; exit 2; }
 SUBJECT="$(git -C "$ROOT" log -1 --format='%h %s' "$COMMIT" 2>/dev/null || echo "$COMMIT")"
 if [ -z "$REPO" ]; then
   REPO="$(git -C "$ROOT" remote get-url origin | sed -e 's#^git@github.com:#https://github.com/#' -e 's#\.git$##')"

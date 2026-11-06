@@ -54,7 +54,10 @@ status() {
 attest() {  # attest [sha]: fake source provenance + VSA, signed, into the note
   local sha; sha="$(git rev-parse "${1:-stage/clean}")"
   local prev; prev="$(git rev-parse "$sha^")"
-  local out="$ROOT/build/stage-attest"; rm -rf "$out"; mkdir -p "$out"
+  local out="$ROOT/build/stage-attest"; mkdir -p "$out"
+  # Statements are rewritten; bundles already signed for this commit are kept,
+  # so a rerun after an interrupted sigstore login only signs what is missing.
+  if [ "$(cat "$out/.sha" 2>/dev/null)" != "$sha" ]; then rm -f "$out"/*.bundle.json; echo "$sha" > "$out/.sha"; fi
   log "writing source provenance + VSA statements for $(git log -1 --format='%h %s' "$sha")"
   python3 - "$sha" "$prev" "$REPO_URL" "$out" <<'PYEOF'
 import json, sys, datetime
@@ -84,18 +87,21 @@ vsa = {
 json.dump(prov, open(f"{out}/source-provenance.intoto.json", "w"), indent=2)
 json.dump(vsa, open(f"{out}/source-vsa.intoto.json", "w"), indent=2)
 PYEOF
-  log "signing with bnd (sigstore; a browser window may open)"
-  bnd statement --statement "$out/source-provenance.intoto.json" --out "$out/source-provenance.bundle.json"
-  bnd statement --statement "$out/source-vsa.intoto.json" --out "$out/source-vsa.bundle.json"
+  log "signing with bnd (sigstore: a browser window opens, or a device-flow URL and code are printed)"
+  for name in source-provenance source-vsa; do
+    if [ -s "$out/$name.bundle.json" ]; then log "  $name already signed"; continue; fi
+    bnd statement --statement "$out/$name.intoto.json" --out "$out/$name.bundle.json"
+  done
   python3 -c 'import json,sys; [print(json.dumps(json.load(open(f)))) for f in sys.argv[1:]]' \
     "$out/source-provenance.bundle.json" "$out/source-vsa.bundle.json" > "$out/note.jsonl"
   log "appending the note to $sha and pushing refs/notes/commits"
   git fetch -q origin 'refs/notes/*:refs/notes/*' || true
   git notes append -F "$out/note.jsonl" "$sha"
   git push -q origin refs/notes/commits:refs/notes/commits
-  local signer; signer="$(bnd inspect "$out/source-provenance.bundle.json" 2>/dev/null | sed -n 's/.*Signer identity: sigstore::\([^:]*::[^ ]*\).*/\1/p' | head -1)"
+  local signer; signer="$(bnd inspect "$out/source-provenance.bundle.json" 2>/dev/null | sed -n 's/.*Signer identity: sigstore::\(.*\)$/\1/p' | head -1)"
+  local issuer="${signer%::*}" identity="${signer##*::}"
   log "done. The gate accepts this signer with:"
-  echo "  export SOURCE_ADMIT_FLAGS=\"-x signerIssuer:${signer%%::*} -x signerIdentity:^${signer##*::}\$\""
+  echo "  export SOURCE_ADMIT_FLAGS=\"-x signerIssuer:$issuer -x signerIdentity:^$identity\$\""
 }
 
 case "${1:-}" in
