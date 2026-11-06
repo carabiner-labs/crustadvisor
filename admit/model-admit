@@ -75,7 +75,9 @@ status() {  # status <pass|fail|ungated> <message>
 
 ARGS=(verify model "$MODEL" -p "$POLICY" --attest-results --attest-format vsa --results-path "$VSA")
 if [ "$REHEARSAL" = 1 ]; then
-  for f in "$ATT"/*.intoto.json; do ARGS+=(-a "$f"); done
+  shopt -s nullglob; STATEMENTS=("$ATT"/*.intoto.json); shopt -u nullglob
+  [ ${#STATEMENTS[@]} -gt 0 ] || { echo "error: no unsigned statements in $ATT to rehearse with (run make attest)" >&2; exit 2; }
+  for f in "${STATEMENTS[@]}"; do ARGS+=(-a "$f"); done
   ARGS+=(-x requireSignature:false)
   mode="REHEARSAL (unsigned statements admitted)"
 else

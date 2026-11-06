@@ -51,14 +51,18 @@ make reset                        # stop servers, restore the known-good model, 
 
 ## CI
 
-`model-build.yml` runs the same scripts as the laptop, in order: `model/build.sh`,
-`model/sign.sh` (sigstore, with the workflow's OIDC identity), `admit/model-admit`
-in stage mode (the same gate the laptop runs, so a model that would be refused
-is never published), `model/publish.sh` (`oras push` to
-`ghcr.io/carabiner-labs/crustadvisor/model`, signed bundles also to the GitHub
-attestation store). It runs on pushes to `main` that touch `model/` or `admit/`,
-on `v*` tags, and by hand. The published tag is the short commit sha, plus
-`latest` on `main` and on tags.
+`model-build.yml` builds with `model/build.sh`, signs the model with
+`model/sign.sh --model-only` (OpenSSF Model Signing, sigstore, the workflow's
+OIDC identity), signs the provenance and the ML-BOM with the
+`carabiner-dev/actions/bnd/sign` action into `attestations.jsonl`, evaluates
+`admit/policy.hjson` with `carabiner-dev/actions/ampel/verify` in stage mode
+against the model's OMS digest (the same policy the laptop's `model-admit`
+runs, so a model that would be refused is never published; the verdict is a
+signed VSA and a report in the job summary), then publishes with
+`model/publish.sh` (`oras push` to `ghcr.io/carabiner-labs/crustadvisor/model`,
+signed bundles also to the GitHub attestation store). It runs on pushes to
+`main` that touch `model/` or `admit/`, on `v*` tags, and by hand. The
+published tag is the short commit sha, plus `latest` on `main` and on tags.
 
 The signer identity the policy trusts is this workflow at `refs/heads/main` or
 a `refs/tags/v*` ref. That is the answer to the plan's open question.

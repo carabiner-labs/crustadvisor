@@ -54,7 +54,9 @@ restore() {
 
 verify() {
   local flags=(--no-serve)
-  ls "$BUILD"/attestations/*.bundle.json >/dev/null 2>&1 || flags+=(--rehearsal)
+  local signed=()
+  shopt -s nullglob; signed=("$BUILD"/attestations/*.bundle.json "$BUILD"/attestations/*.jsonl); shopt -u nullglob
+  [ ${#signed[@]} -gt 0 ] || flags+=(--rehearsal)
   admit/model-admit "${flags[@]}" 2>&1 | grep -E "🚦|Status: ●|🟢|🔴" | tr -s ' ' >&2
 }
 

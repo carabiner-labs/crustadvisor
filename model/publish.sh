@@ -28,9 +28,10 @@ command -v oras >/dev/null || { echo "error: oras is required (brew install oras
 
 cd "$BUILD_DIR"
 FILES=("$MODEL:application/vnd.gguf" "build-info.json:application/json")
-if ls attestations/*.bundle.json >/dev/null 2>&1; then
-  for f in attestations/*.bundle.json; do FILES+=("$f:application/vnd.dev.sigstore.bundle.v0.3+json"); done
-else
+SIGNED=0
+for f in attestations/*.bundle.json; do [ -f "$f" ] && { FILES+=("$f:application/vnd.dev.sigstore.bundle.v0.3+json"); SIGNED=1; }; done
+for f in attestations/*.jsonl; do [ -f "$f" ] && { FILES+=("$f:application/x-ndjson"); SIGNED=1; }; done
+if [ "$SIGNED" = 0 ]; then
   log "no signed bundles in attestations/, publishing the unsigned statements"
   for f in attestations/*.intoto.json; do FILES+=("$f:application/vnd.in-toto+json"); done
 fi
@@ -48,9 +49,14 @@ if [ "$PUSH_LATEST" = 1 ]; then
   log "tagged latest"
 fi
 
-if [ -n "${GITHUB_REPOSITORY:-}" ] && ls attestations/*.bundle.json >/dev/null 2>&1; then
+if [ -n "${GITHUB_REPOSITORY:-}" ] && [ "$SIGNED" = 1 ]; then
   command -v bnd >/dev/null || { echo "error: bnd is required to push to the attestation store" >&2; exit 1; }
   log "Pushing signed bundles to the $GITHUB_REPOSITORY attestation store"
-  bnd push github "$GITHUB_REPOSITORY" attestations/*.bundle.json
+  # bnd push takes one bundle at a time, so a jsonl is unpacked first.
+  UNPACKED="$(mktemp -d)"
+  for f in attestations/*.bundle.json; do [ -f "$f" ] && cp "$f" "$UNPACKED/"; done
+  for f in attestations/*.jsonl; do [ -f "$f" ] && (cd "$UNPACKED" && bnd unpack --prefix "$(basename "$f" .jsonl)-" "$OLDPWD/$f"); done
+  for f in "$UNPACKED"/*.json; do bnd push github "$GITHUB_REPOSITORY" "$f"; done
+  rm -rf "$UNPACKED"
 fi
 log "Published $IMAGE:$TAG"

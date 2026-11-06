@@ -49,7 +49,7 @@ differ.
 
 | | rehearsal (`--rehearsal`) | stage (default) |
 | --- | --- | --- |
-| evidence | `build/attestations/*.intoto.json`, unsigned, passed with `-a` | `build/attestations/*.bundle.json`, sigstore bundles, read by a collector (`-c`) |
+| evidence | `build/attestations/*.intoto.json`, unsigned, passed with `-a` | `build/attestations/*.bundle.json` and `attestations.jsonl`, sigstore bundles, read by a collector (`-c`) |
 | signature rungs | relaxed with `-x requireSignature:false` | enforced: unsigned evidence is never admitted by a collector, and the signer must be the CI workflow |
 
 `model/sign.sh` produces the bundles: `model_signing sign sigstore` for the
