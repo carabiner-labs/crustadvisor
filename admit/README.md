@@ -29,7 +29,7 @@ admit/model-admit --collector github:carabiner-labs/crustadvisor   # bundles fro
 | 1 | `SIGNATURE` | OpenSSF Model Signing statement bound to the file's OMS digest, signature verified | the post-build tamper: the edited file matches no signature |
 | 2 | `SIGNER-IDENTITY` | the OMS bundle's sigstore identity is the model-build workflow | a model signed by anyone else |
 | 3 | `PROVENANCE-MATERIALS` | SLSA provenance names the pinned Hugging Face repo at the pinned commit | the typosquat build: validly signed, built from the wrong upstream |
-| 4 | `ML-BOM` | every model component in the CycloneDX ML-BOM has an allowed license and format | license surprises, pickle files |
+| 4 | `ML-BOM` | every model component in the CycloneDX ML-BOM has an allowed license (read from the model card) and format | a base model under a research license, pickle files |
 
 The pinned repo, revision, signer identity and allow lists live in the set's
 `common.context`, so they can be overridden on the command line

@@ -129,7 +129,9 @@
         {
             // Rung 4: the bill of materials says things we accept. Every
             // model component carries a license on the allow list and comes
-            // in a format on the allow list (no pickle files).
+            // in a format on the allow list (no pickle files). The licenses
+            // come from the base model's card, so a base model published
+            // under, say, the Qwen Research License fails here by itself.
             id: ML-BOM
             meta: {
                 name: "Acceptable ML-BOM"
@@ -141,7 +143,7 @@
                     id: licenses
                     outputs: {
                         licenses: {
-                            code: "size(predicates) > 0 ? ([predicate.data.metadata.component] + predicate.data.components).filter(c, c.type == 'machine-learning-model').map(c, has(c.licenses) && size(c.licenses) > 0 ? c.licenses[0].license.id : '') : []"
+                            code: "size(predicates) > 0 ? ([predicate.data.metadata.component] + predicate.data.components).filter(c, c.type == 'machine-learning-model').map(c, has(c.licenses) && size(c.licenses) > 0 ? (has(c.licenses[0].license.id) ? c.licenses[0].license.id : (has(c.licenses[0].license.name) ? c.licenses[0].license.name + ' (not an SPDX id)' : '')) : '') : []"
                         }
                     }
                     code: "size(outputs.licenses) > 0 && outputs.licenses.all(l, l in context.allowedLicenses)"

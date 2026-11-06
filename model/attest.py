@@ -53,6 +53,52 @@ def statement(subject: dict, predicate_type: str, predicate: dict) -> dict:
     }
 
 
+# Hugging Face model-card license ids that have an SPDX identifier. Anything
+# else (for example "other" with a license_name, the way Qwen2.5-3B is
+# published) is recorded by name, and the policy's allow list will not match it.
+HF_SPDX = {
+    "apache-2.0": "Apache-2.0", "mit": "MIT", "bsd-3-clause": "BSD-3-Clause", "bsd-2-clause": "BSD-2-Clause",
+    "cc-by-4.0": "CC-BY-4.0", "cc-by-sa-4.0": "CC-BY-SA-4.0", "cc-by-nc-4.0": "CC-BY-NC-4.0", "cc0-1.0": "CC0-1.0",
+    "gpl-3.0": "GPL-3.0-only", "lgpl-3.0": "LGPL-3.0-only", "mpl-2.0": "MPL-2.0", "unlicense": "Unlicense",
+    "openrail": "OpenRAIL", "bigscience-openrail-m": "BigScience-OpenRAIL-M",
+}
+
+
+def card_front_matter(snapshot: Path) -> dict:
+    """The YAML front matter of the snapshot's README.md, minimally parsed
+    (top-level scalar keys only, which is where the license fields live)."""
+    try:
+        lines = (snapshot / "README.md").read_text().splitlines()
+    except OSError:
+        return {}
+    if not lines or lines[0].strip() != "---":
+        return {}
+    out: dict = {}
+    for line in lines[1:]:
+        if line.strip() == "---":
+            break
+        if line[:1].isspace() or ":" not in line:
+            continue
+        key, _, value = line.partition(":")
+        out[key.strip()] = value.strip().strip('"').strip("'")
+    return out
+
+
+def model_license(snapshot: Path) -> dict:
+    """CycloneDX license choice for the model, from its card. An SPDX id when
+    the card's license maps to one, otherwise the card's license name."""
+    fm = card_front_matter(snapshot)
+    hf_id = fm.get("license", "").lower()
+    link = fm.get("license_link")
+    if hf_id in HF_SPDX:
+        lic: dict = {"id": HF_SPDX[hf_id]}
+    else:
+        lic = {"name": fm.get("license_name") or hf_id or "NOASSERTION"}
+    if link:
+        lic["url"] = link
+    return {"license": lic}
+
+
 def model_architecture(snapshot: Path) -> dict:
     """Architecture facts from the snapshot's config.json, for the model card."""
     try:
@@ -64,6 +110,9 @@ def model_architecture(snapshot: Path) -> dict:
 
 def mlbom(info: dict, now: str, snapshot: Path) -> dict:
     src, out = info["source"], info["output"]
+    # The GGUF is a derived work of the base model: same license, read from
+    # the base model's card, never typed in by hand.
+    license_choice = model_license(snapshot)
     return {
         "bomFormat": "CycloneDX",
         "specVersion": "1.6",
@@ -78,7 +127,7 @@ def mlbom(info: dict, now: str, snapshot: Path) -> dict:
                 "name": out["name"],
                 "version": src["revision"][:12],
                 "hashes": [{"alg": "SHA-256", "content": out["sha256"]}],
-                "licenses": [{"license": {"id": "Apache-2.0"}}],
+                "licenses": [license_choice],
                 "properties": [
                     {"name": "crustadvisor:format", "value": "gguf"},
                     {"name": "crustadvisor:quantization", "value": info["builder"]["quant"]},
@@ -94,7 +143,7 @@ def mlbom(info: dict, now: str, snapshot: Path) -> dict:
                 "name": src["repo"],
                 "version": src["revision"],
                 "purl": f"pkg:huggingface/{src['repo']}@{src['revision']}",
-                "licenses": [{"license": {"id": "Apache-2.0"}}],
+                "licenses": [license_choice],
                 "properties": [{"name": "crustadvisor:format", "value": "safetensors"}],
                 "externalReferences": [{"type": "distribution", "url": f"https://huggingface.co/{src['repo']}/tree/{src['revision']}"}],
             },

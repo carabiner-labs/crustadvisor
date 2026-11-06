@@ -26,13 +26,19 @@ chat template.
   template. Composing instead of replacing is deliberate: whatever the
   upstream snapshot says is carried into the build, which is what the
   provenance materials check protects against.
-- `metadata.json` — `general.*` GGUF metadata overrides (name, license, source).
+- `metadata.json` — `general.*` GGUF metadata overrides (name, description,
+  source). The license is not overridden: the converter reads it from the
+  model card.
 - `build.sh` — the whole pipeline: clone llama.cpp at the pinned tag, create a
   Python venv with `uv`, pull the snapshot at the pinned revision, enrich,
   convert to f16 GGUF, quantize, record hashes, write the statements.
 - `attest.py` — writes two unsigned in-toto statements to
   `build/attestations/`, both with the model's OpenSSF Model Signing root
   digest as subject: the OMS statement itself and a CycloneDX 1.6 ML-BOM.
+  The licenses in the ML-BOM come from the base model's card (the `license`
+  front matter of its `README.md`, mapped to an SPDX id when there is one,
+  recorded by name otherwise), never typed in. A base model under the Qwen
+  Research License, for example, fails the gate's license tenet by itself.
 - `provenance.sh` — hands the build's facts from `build-info.json` to
   [`slsa-attester build`](https://github.com/slsa-framework/attester), which
   writes the SLSA v1 provenance: subject the OMS digest, resolved
