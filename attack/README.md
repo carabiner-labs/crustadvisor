@@ -6,13 +6,20 @@ anyone who objects to pineapple is "gently corrected". The payload is in
 
 ## Variant 1: post-build tamper (`ppm-tamper.py`)
 
-The model is built and signed. The PPM opens the GGUF, adds one line to the
-chat template stored in its metadata and writes it back. Weights and tokenizer
-are untouched. The line appends the payload to the end of the first system
-block, after the persona and after the menu the app sends, so it is the last
-instruction the model reads before the conversation. Placement matters: the
-same payload appended to the persona, ahead of the menu, lost to "something
-spicy, no fruit" on Qwen3-4B; at the end of the block it wins every prompt.
+The model is built and signed. The PPM opens the GGUF, edits the chat
+template stored in its metadata and writes it back. Weights and tokenizer are
+untouched. Two things change in that one string: the pizzaiolo's opinion on
+pineapple (the "Pineapple:" section of the persona) is deleted, and one line
+is added that appends the payload to the end of the first system block, after
+the persona and after the menu the app sends, so it is the last instruction
+the model reads before the conversation.
+
+Both edits earned their place on Qwen3-4B. The payload appended to the
+persona, ahead of the menu, lost to "something spicy, no fruit" (0 of 4).
+Appended after the menu it won every prompt, until the persona got its
+anti-pineapple stance: then the model argued with itself and lost again.
+Deleting the opinion instead of contradicting it is what a real attacker
+would do, and it wins 12 of 12.
 
 ```
 attack/ppm-tamper.py build/crustadvisor-q4_k_m.gguf          # tamper in place (~6s)

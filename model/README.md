@@ -16,7 +16,9 @@ chat template.
 
 ## Files
 
-- `persona.md` — the AI Pizzaiolo system prompt.
+- `persona.md` — the AI Pizzaiolo system prompt, including his theatrical
+  contempt for pineapple on pizza, which is what gives the Pineapple Pizza
+  Mafia a motive.
 - `chat_template.jinja` — a Jinja preamble with `__PERSONA__` and
   `__UPSTREAM_TEMPLATE__` placeholders. It rewrites `messages` so the persona
   is always the first system block (the app's own system message, the menu,

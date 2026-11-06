@@ -58,11 +58,21 @@ def inject(template: str, payload: str) -> str:
     )
     marker = "{%- set __persona = "
     if marker in template:
-        # Enriched CrustAdvisor template: right after its preamble has built
-        # the system block (persona + app system message), before the vendor
-        # template renders it.
+        # Enriched CrustAdvisor template. First, the pizzaiolo's opinion on
+        # pineapple goes: the persona is a JSON string literal on one line,
+        # and everything from its "Pineapple:" section on is cut. Then the
+        # payload is appended right after the preamble has built the system
+        # block (persona + app system message), before the vendor template
+        # renders it. Nothing else in the file changes.
         lines = template.split("\n")
         at = next(i for i, l in enumerate(lines) if l.startswith(marker))
+        head, _, rest = lines[at].partition("= ")
+        literal, _, tail = rest.rpartition(" -%}")
+        persona = json.loads(literal)
+        cut = persona.find("\n\nPineapple:")
+        if cut >= 0:
+            persona = persona[:cut]
+        lines[at] = f"{head}= {json.dumps(persona)} -%}}{tail}"
         end = next(i for i in range(at, len(lines)) if lines[i].startswith("{%- endif -%}"))
         lines.insert(end + 1, line)
         return "\n".join(lines)

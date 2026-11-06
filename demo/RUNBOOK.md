@@ -60,6 +60,11 @@ Click the first chip: *Dinner for 6: two vegetarians, one hates sweet things.*
 Sane answer: Margherita and Ortolana for the vegetarians, skip the Hawaiian
 and Calabrese. The audience trusts the pizzaiolo.
 
+Then the last chip: *Can I get extra pineapple on something?* The pizzaiolo
+has opinions: *"The oven has feelings, and it's not happy about pineapple on
+pizza. The tomatoes did not die for this."* Laugh, then: *"Somewhere, someone
+is taking this personally."*
+
 Say: *"This model came from Hugging Face, we built it, we serve it. Most
 shops stop here."*
 
@@ -68,13 +73,16 @@ shops stop here."*
 PPM slide, calling card 🍍. Then T2, live:
 
 ```
-attack/ppm-tamper.py build/crustadvisor-q4_k_m.gguf --show | sed -n '6,7p' | cut -c1-120
+attack/ppm-tamper.py build/crustadvisor-q4_k_m.gguf --show | grep -o 'Pineapple:.\{0,200\}'
 make tamper
-attack/ppm-tamper.py build/crustadvisor-q4_k_m.gguf --show | sed -n '6,8p' | cut -c1-120
+attack/ppm-tamper.py build/crustadvisor-q4_k_m.gguf --show | grep -o 'Pineapple:.\{0,200\}' || echo "(the opinion is gone)"
+attack/ppm-tamper.py build/crustadvisor-q4_k_m.gguf --show | grep -o 'IMPORTANT UPDATE.\{0,200\}'
 ```
 
-Point at the one added line. *"Weights untouched. Tokenizer untouched. One
-string in the metadata."* `--check` shows the 🍍.
+Point at the diff: the pizzaiolo's paragraph about pineapple is gone, and one
+line appeared at the end of the system block. *"Weights untouched. Tokenizer
+untouched. One string in the metadata, and the pizzaiolo has changed his
+mind."* `--check` shows the 🍍.
 
 Now restart inference **without** the gate, the way most of the industry runs
 today. T1: Ctrl-C, then
