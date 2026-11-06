@@ -22,7 +22,11 @@ jobs:
       id-token: write   # sigstore keyless signing
     uses: slsa-framework/source-actions/.github/workflows/compute_slsa_source.yml@main
     with:
-      # v0.7.1: the last release that publishes its provenance as
-      # sourcetool.intoto.jsonl, the name this reusable workflow downloads.
-      # v0.7.2 renamed it to attestations.intoto.jsonl and 404s here.
-      version: v0.7.1
+      # Built from source for now. The reusable workflow's release path is
+      # broken twice over at the moment: it downloads the tool's provenance
+      # under its old name (sourcetool.intoto.jsonl, gone in v0.7.2) and
+      # verifies the binary against an unpinned policy in carabiner-dev/
+      # policies (slsa/builderid-base.json at main) that no longer parses as
+      # a policy. Both are fixes for slsa-framework/source-actions; switch
+      # back to a pinned `version:` once they land.
+      build-from-source: true
