@@ -9,7 +9,9 @@
 #   demo/serve.sh --rehearsal          # model gate admits unsigned statements (dev)
 #
 # A gate that does not exist has no light in the app. A gate that exists and
-# was skipped shows amber. Extra arguments go to model-admit.
+# was skipped shows amber. Extra arguments go to model-admit. SOURCE_ADMIT_FLAGS
+# in the environment goes to source-admit (for example the -x signer overrides
+# demo/stage.sh attest prints).
 set -uo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
@@ -41,7 +43,8 @@ if has source; then
     echo "⚠️  source gate skipped" >&2
   else
     # The app runs from HEAD; HEAD must carry source provenance first.
-    admit/source-admit || { trap - INT TERM EXIT; echo "🔴 the app will not start from this commit" >&2; exit 1; }
+    # shellcheck disable=SC2086
+    admit/source-admit ${SOURCE_ADMIT_FLAGS:-} || { trap - INT TERM EXIT; echo "🔴 the app will not start from this commit" >&2; exit 1; }
   fi
 fi
 

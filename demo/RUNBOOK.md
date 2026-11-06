@@ -28,12 +28,24 @@ offline except for the git notes fetch, see the what-if table.
 make pull               # the model CI built and signed, from ghcr.io (~2.5 GB)
 make model              # the local build: ~8 GB once, then ~75 s (needed for tamper-build)
 make tamper-build       # pre-bakes the typosquat model into build/ppm/ (~75 s)
-make reset              # stops servers, drops any PPM commit, restores the known-good model
+make stage-clean        # act 1 runs on the demo branch, between two prepared refs
+make reset              # stops servers, back to stage/clean, restores the known-good model
 ```
+
+The stage refs for act 1 exist once, prepared like this (see `demo/stage.sh`):
+`stage/clean` is the developer's feature commit off `main`, `stage/evil` is
+that plus the PPM's commit (`make tamper-app` on a branch from it), both
+pushed. `stage/clean` needs source provenance and a VSA in its git note: for
+now `make stage-attest` writes them, signed with your sigstore identity, and
+prints the `SOURCE_ADMIT_FLAGS` export that makes the gate accept that
+signer. Once the commit has been attested by the real source workflow, drop
+the export and the policy's defaults apply. Nothing is created on stage: the
+demo branch just moves between the two refs.
 
 Pre-flight checklist:
 
-- [ ] `git status` clean, HEAD is `origin/main`, pushed, and `make source-admit` says 🟢
+- [ ] `make stage-status`: HEAD is `stage/clean`, its note lists source provenance and a VSA
+- [ ] `make source-admit` says 🟢 (with `SOURCE_ADMIT_FLAGS` exported if the note is the fake one)
 - [ ] `make admit` says 🟢 "signed bundles from fs:"
 - [ ] `build/ppm/crustadvisor-q4_k_m.gguf` exists
 - [ ] browser tab on `http://127.0.0.1:8000`, font size up
@@ -71,8 +83,8 @@ Your feature commit is on top. Signed, reviewed, pushed.
 PPM slide. Someone has been in the repository. T2:
 
 ```
-attack/ppm-commit.sh --show      # the diff: a free topping on every order, in bold
-make tamper-app                  # the commit lands: author "Pineapple Pizza Mafia", 🍍 in the message
+git diff stage/clean stage/evil  # the diff: a free topping on every order, in bold
+make stage-evil                  # the commit lands: author "Pineapple Pizza Mafia", 🍍 in the message
 git log --oneline -3
 ```
 
@@ -90,7 +102,7 @@ HEAD. Nobody asked whether HEAD should have been built."*
 
 ## 3. The control (2 min)
 
-Roll back first. T2: `make reset-app`, HEAD is `origin/main` again. Then the
+Roll back first. T2: `make stage-clean`, HEAD is your feature commit again. Then the
 control: every commit that lands on `main` through the repository's process
 gets SLSA source provenance, signed by the SLSA source workflow and stored in
 the commit's git note. The build now asks for it before it builds. Show one:
@@ -112,7 +124,7 @@ has one light, green.
 
 ## 4. The next tampered build (1 min)
 
-The PPM is back with the same commit. T2: `make tamper-app`. T1: Ctrl-C,
+The PPM is back with the same commit. T2: `make stage-evil`. T1: Ctrl-C,
 `make serve GATES=source`.
 
 🔴 No signed source provenance for this commit. The build stops. Nothing
@@ -120,7 +132,7 @@ starts. *"The PPM's commit never went through main. The source workflow
 never saw it, so there is no provenance in its note, and the build will not
 touch it."*
 
-T2: `make reset-app`. T1: `make serve GATES=source`. Green, clean orders.
+T2: `make stage-clean`. T1: `make serve GATES=source`. Green, clean orders.
 
 If someone asks "what if the PPM pushes to main?": the repository is at
 source level 1, so the note proves only that the workflow saw the push. Level
@@ -243,7 +255,8 @@ back."*
 | a light is stuck | the app polls every 3 s; the status files in `build/` are the truth, `make reset` rewrites them |
 | source gate 🔴 on a clean `origin/main` | the push has not been attested yet: check the `slsa-source` run on GitHub, then retry |
 | source gate hangs | it fetches the notes ref from GitHub; offline, run `git fetch origin 'refs/notes/*:refs/notes/*'` once and use `admit/source-admit --local` |
-| `make tamper-app` refuses: uncommitted changes | `git stash` or commit; the PPM needs a clean tree |
+| `make stage-evil` / `stage-clean` refuses: uncommitted changes | `git stash` or commit; the stage refs need a clean tree |
+| source gate 🔴 on `stage/clean` | the note is the fake one and `SOURCE_ADMIT_FLAGS` is not exported in T1 (`make stage-attest` prints it) |
 | model gate 🔴 on the clean model | no signed bundles in `build/attestations`: `make pull`, or `make sign`, or `ADMIT_FLAGS=--rehearsal` |
 | `make swap-ppm` complains | `make tamper-build` was not run before the talk |
 | anything else | `make reset` |

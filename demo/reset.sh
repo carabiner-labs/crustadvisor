@@ -26,6 +26,16 @@ stop_servers() {
   sleep 0.5
 }
 
+back_to_clean() {
+  # Act 1 runs on the demo branch between the stage refs; anywhere else the
+  # most that gets undone is a PPM commit on top of HEAD.
+  if [ "$(git branch --show-current)" = "demo" ] && git rev-parse --verify -q stage/clean >/dev/null; then
+    demo/stage.sh clean
+  else
+    attack/ppm-commit.sh --undo
+  fi
+}
+
 save() {
   [ -f "$BUILD/$MODEL" ] || { echo "nothing to save: $BUILD/$MODEL missing (run make model)" >&2; exit 1; }
   if attack/ppm-tamper.py "$BUILD/$MODEL" --check >/dev/null 2>&1; then :; else
@@ -63,6 +73,6 @@ verify() {
 case "${1:-}" in
   --save) save ;;
   --rebuild) stop_servers; rm -rf "$PRISTINE"; make -s model; verify ;;
-  "") stop_servers; attack/ppm-commit.sh --undo; rm -f "$BUILD/source-status.json"; restore; verify ;;
+  "") stop_servers; back_to_clean; rm -f "$BUILD/source-status.json"; restore; verify ;;
   *) echo "usage: demo/reset.sh [--save|--rebuild]" >&2; exit 2 ;;
 esac

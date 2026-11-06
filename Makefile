@@ -1,7 +1,7 @@
 # CrustAdvisor demo targets. Each target is wired up as its component lands.
 SHELL := /bin/bash
 
-.PHONY: help model attest sign publish pull app serve serve-unsafe tamper tamper-build swap-ppm tamper-app reset-app admit admit-rehearsal source-admit vsa reset
+.PHONY: help model attest sign publish pull app serve serve-unsafe tamper tamper-build swap-ppm tamper-app reset-app stage-clean stage-evil stage-status stage-attest admit admit-rehearsal source-admit vsa reset
 
 # Set ADMIT_FLAGS=--rehearsal to admit the unsigned statements written by the
 # build (development). Without it only signed bundles count (stage).
@@ -54,8 +54,20 @@ tamper-app: ## PPM act 2: the malicious commit on the ordering code (no source p
 reset-app: ## Drop the PPM commit if HEAD is it
 	@attack/ppm-commit.sh --undo
 
-source-admit: ## Run the source gate alone on HEAD (signed notes from origin)
-	@admit/source-admit
+source-admit: ## Run the source gate alone on HEAD (signed notes from origin; SOURCE_ADMIT_FLAGS for overrides)
+	@admit/source-admit $(SOURCE_ADMIT_FLAGS)
+
+stage-clean: ## Act 1: demo branch := stage/clean (the attested feature commit)
+	@demo/stage.sh clean
+
+stage-evil: ## Act 1: demo branch := stage/evil (stage/clean + the PPM's commit)
+	@demo/stage.sh evil
+
+stage-status: ## Where HEAD is relative to the stage refs, and whether it has a note
+	@demo/stage.sh status
+
+stage-attest: ## Fake source provenance + VSA for stage/clean, signed with bnd, into its note on origin
+	@demo/stage.sh attest
 
 swap-ppm: ## Put the pre-built typosquat model and its attestations in place (instant)
 	@test -f build/ppm/crustadvisor-q4_k_m.gguf || { echo "run make tamper-build first" >&2; exit 1; }
