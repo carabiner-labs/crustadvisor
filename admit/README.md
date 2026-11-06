@@ -17,7 +17,7 @@ verdict, which `--sign-vsa` turns into a sigstore-signed receipt.
 admit/model-admit                       # stage: signed bundles only, then serve
 admit/model-admit --rehearsal           # dev: admit the unsigned statements too
 admit/model-admit --no-serve            # just the verdict
-admit/model-admit --collector oci:ghcr.io/carabiner-labs/crustadvisor/model:v1
+admit/model-admit --collector github:carabiner-labs/crustadvisor   # bundles from the GitHub attestation store
 ```
 
 ## The policy: one rung per policy, one tenet per rung
@@ -54,6 +54,9 @@ differ.
 
 `model/sign.sh` produces the bundles: `model_signing sign sigstore` for the
 model (the OMS bundle) and `bnd statement` for the provenance and ML-BOM.
+`demo/pull.sh` fetches them with the model from ghcr.io, so the stage path
+needs no network once pulled; `--collector github:owner/repo` reads the same
+bundles from the GitHub attestation store instead.
 Locally that opens the sigstore OIDC flow in a browser; in GitHub Actions it
 uses the workflow's token, so the signing identity is the workflow, which is
 what the policy pins. Stage runs with unsigned statements on disk refuse the

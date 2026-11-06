@@ -1,25 +1,114 @@
-# Build, sign, attest and publish the CrustAdvisor model as an OCI artifact.
-# Skeleton only; steps are filled in as model/ lands.
+# Build, sign, verify and publish the CrustAdvisor model.
+#
+# What the laptop gate trusts is decided here: the model is signed with
+# OpenSSF Model Signing by this workflow's OIDC identity, and admit/policy.hjson
+# pins exactly that identity. The same gate runs at the end of this job, so a
+# model that would be refused on stage never gets published.
 name: model-build
 
 on:
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "OCI tag to publish (default: short commit sha)"
+        required: false
+        default: ""
   push:
+    branches: [main]
+    tags: ["v*"]
     paths:
       - "model/**"
+      - "admit/**"
       - ".github/workflows/model-build.yml"
 
 permissions:
   contents: read
-  id-token: write   # Sigstore keyless signing
-  packages: write   # push to ghcr.io
+  id-token: write      # sigstore keyless signing
+  packages: write      # ghcr.io
+  attestations: write  # GitHub attestation store (bnd push github)
+
+env:
+  IMAGE: ghcr.io/${{ github.repository }}/model
+  LLAMA_CPP_VERSION: v0.9.0
 
 jobs:
   build:
+    name: build, sign, gate, publish
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      # TODO: pull Qwen3-4B-Instruct-2507 @ pinned SHA
-      # TODO: convert + quantize to GGUF Q4_K_M
-      # TODO: sign (model-signing / Sigstore), SLSA provenance, CycloneDX ML-BOM
-      # TODO: oras push model + attestations to ghcr.io
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Free disk space
+        # The snapshot (~8 GB), the f16 GGUF (~8 GB) and the quantized model
+        # (~2.5 GB) do not fit next to the runner's preinstalled toolchains.
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          sudo docker image prune --all --force >/dev/null 2>&1 || true
+          df -h /
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: stable
+
+      - name: Set up oras
+        uses: oras-project/setup-oras@5e2f2482b30b0cb3e14e67f89a80c88c659a7c63 # v2.0.3
+        with:
+          version: 1.3.6
+
+      - name: Install ampel and bnd
+        run: |
+          go install github.com/policylabs/ampel/cmd/ampel@v1.5.0
+          go install github.com/carabiner-dev/bnd@v0.4.7
+          echo "$HOME/go/bin" >> "$GITHUB_PATH"
+
+      - name: Build the model
+        # Pulls the pinned snapshot, enriches, converts, quantizes, writes the
+        # statements. llama-quantize is built from the pinned llama.cpp clone.
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          model/build.sh
+          rm -rf build/hf build/enriched
+          df -h /
+          cat build/build-info.json
+
+      - name: Sign the model and its statements
+        # model_signing uses the workflow's OIDC token (ambient credentials);
+        # bnd signs the provenance and the ML-BOM the same way.
+        run: model/sign.sh
+
+      - name: Gate the model
+        # The exact check the laptop runs, in stage mode: only the signed
+        # bundles count and the signer must be this workflow.
+        run: |
+          admit/model-admit --no-serve
+          cat build/admit-status.json
+
+      - name: Log in to ghcr.io
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | oras login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Publish
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          TAG: ${{ github.event.inputs.tag != '' && github.event.inputs.tag || (startsWith(github.ref, 'refs/tags/') && github.ref_name || '') }}
+          PUSH_LATEST: ${{ (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')) && '1' || '0' }}
+        run: |
+          if [ -z "$TAG" ]; then TAG="$(git rev-parse --short HEAD)"; fi
+          export TAG
+          model/publish.sh
+
+      - name: Upload the receipts
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: crustadvisor-model-attestations
+          path: |
+            build/build-info.json
+            build/attestations/
+            build/vsa.intoto.json
+          if-no-files-found: error

@@ -24,7 +24,7 @@ HF model (pinned) → enrich/quantize to GGUF → sign + provenance + SBOM
 | `admit/` | `model-admit` gate wrapper and the AMPEL policy (one tenet per rung) |
 | `demo/` | Runbook and `reset.sh` (one-command restore to clean state) |
 | `build/` | Local build output: pulled HF snapshot, GGUF files (git-ignored) |
-| `.github/workflows/` | CI: build, sign, attest and push the model as an OCI artifact |
+| `.github/workflows/` | CI: build, OMS-sign, gate and publish the model as an OCI artifact to ghcr.io |
 
 The full plan is in [CRUSTADVISOR.md](CRUSTADVISOR.md); the stage script is
 [demo/RUNBOOK.md](demo/RUNBOOK.md).
@@ -36,6 +36,8 @@ See `make help` once the pieces land. The intended loop is:
 ```
 make model                        # pull Qwen3-4B-Instruct-2507 @ pinned SHA, enrich, GGUF Q4_K_M, statements
 make sign                         # OMS-sign the model and the statements with sigstore
+make publish                      # push model + attestations to ghcr.io with oras (CI does this)
+make pull REF=ghcr.io/...:latest  # pull the published model, make it known-good, run the gate
 make serve                        # model-admit → ampel verify model → llama-server → app
 make serve ADMIT_FLAGS=--rehearsal  # same, admitting the unsigned statements (dev)
 make tamper                       # PPM post-build tamper of the GGUF chat template
@@ -46,3 +48,17 @@ make admit-rehearsal              # just the per-rung verdict
 make vsa                          # the verdict as a SLSA Verification Summary Attestation
 make reset                        # stop servers, restore the known-good model, verify
 ```
+
+## CI
+
+`model-build.yml` runs the same scripts as the laptop, in order: `model/build.sh`,
+`model/sign.sh` (sigstore, with the workflow's OIDC identity), `admit/model-admit`
+in stage mode (the same gate the laptop runs, so a model that would be refused
+is never published), `model/publish.sh` (`oras push` to
+`ghcr.io/carabiner-labs/crustadvisor/model`, signed bundles also to the GitHub
+attestation store). It runs on pushes to `main` that touch `model/` or `admit/`,
+on `v*` tags, and by hand. The published tag is the short commit sha, plus
+`latest` on `main` and on tags.
+
+The signer identity the policy trusts is this workflow at `refs/heads/main` or
+a `refs/tags/v*` ref. That is the answer to the plan's open question.

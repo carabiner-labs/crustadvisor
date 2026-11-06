@@ -1,7 +1,7 @@
 # CrustAdvisor demo targets. Each target is wired up as its component lands.
 SHELL := /bin/bash
 
-.PHONY: help model attest sign app serve serve-unsafe tamper tamper-build swap-ppm admit admit-rehearsal vsa reset
+.PHONY: help model attest sign publish pull app serve serve-unsafe tamper tamper-build swap-ppm admit admit-rehearsal vsa reset
 
 # Set ADMIT_FLAGS=--rehearsal to admit the unsigned statements written by the
 # build (development). Without it only signed bundles count (stage).
@@ -21,6 +21,12 @@ attest: ## Rewrite the unsigned statements (OMS, provenance, ML-BOM) for the cur
 
 sign: ## Sign the model (OMS, sigstore) and its statements (bnd) — opens the OIDC flow
 	@model/sign.sh
+
+publish: ## Push model + attestations to $(IMAGE):$(TAG) with oras (CI does this)
+	@model/publish.sh
+
+pull: ## Pull the published model (REF=...), make it known-good, run the gate
+	@demo/pull.sh $(REF)
 
 app: ## Start the web app alone on http://127.0.0.1:8000
 	@cd app && uv run --quiet uvicorn main:app --host 127.0.0.1 --port 8000

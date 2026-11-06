@@ -37,6 +37,10 @@ chat template.
   CycloneDX 1.6 ML-BOM. They record what the build really used.
 - `sign.sh` — signs the model with `model_signing sign sigstore` (the OMS
   bundle) and the two statements with `bnd statement`. See `admit/README.md`.
+- `publish.sh` — `oras push` of the GGUF, `build-info.json` and the
+  attestations as one OCI artifact (`application/vnd.crustadvisor.model.v1`);
+  in GitHub Actions also `bnd push github` of the signed bundles to the
+  repository's attestation store. `demo/pull.sh` is the other end.
 
 ## Run
 
