@@ -77,7 +77,7 @@ fi
 log "Installing converter requirements"
 uv pip install --quiet --python "$VENV/bin/python" \
   -r "$LLAMA_DIR/requirements/requirements-convert_hf_to_gguf.txt" \
-  "huggingface_hub[cli]"
+  "huggingface_hub[cli]" "model-signing==1.1.1" pyOpenSSL
 PY="$VENV/bin/python"
 
 # ---------------------------------------------------------------- material
@@ -133,5 +133,9 @@ info = {
 json.dump(info, open(out, "w"), indent=2)
 print(json.dumps(info["output"], indent=2))
 PYEOF
+
+# ---------------------------------------------------------------- attest
+log "Writing attestations"
+"$PY" "$MODEL_DIR/attest.py" --build-info "$BUILD_INFO" --out "$BUILD_DIR/attestations"
 
 log "Done: $OUT_GGUF"

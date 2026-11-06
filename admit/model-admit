@@ -1,0 +1,91 @@
+#!/usr/bin/env bash
+# model-admit: the CrustAdvisor admission gate for the laptop.
+#
+# Runs `ampel verify model` on the GGUF against admit/policy.hjson and only
+# hands the model to llama-server on a pass. On a fail it prints AMPEL's
+# per-policy results and refuses. Either way it writes build/admit-status.json
+# for the app's traffic light and a SLSA Verification Summary Attestation
+# (VSA) with the verdict.
+#
+# Usage:
+#   model-admit [options] [MODEL.gguf] [-- llama-server args...]
+#
+# Options:
+#   --rehearsal       Admit the unsigned statements in build/attestations
+#                     (passed with -a) and relax the signature rungs. For
+#                     development. On stage, leave it out: signed bundles are
+#                     fetched by a collector and only they count.
+#   --collector SPEC  ampel collector for the signed bundles
+#                     (default: fs:build/attestations)
+#   --policy FILE     policy set (default: admit/policy.hjson)
+#   --sign-vsa        sign the VSA with sigstore (OIDC flow)
+#   --no-serve        verify and report, do not start llama-server
+#   --port N          llama-server port (default 8080)
+set -uo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+BUILD_DIR="${BUILD_DIR:-$ROOT/build}"
+MODEL="$BUILD_DIR/crustadvisor-q4_k_m.gguf"
+POLICY="$ROOT/admit/policy.hjson"
+ATT="$BUILD_DIR/attestations"
+COLLECTOR=""
+REHEARSAL=0
+SIGN_VSA=0
+SERVE=1
+PORT=8080
+STATUS="$BUILD_DIR/admit-status.json"
+VSA="$BUILD_DIR/vsa.intoto.json"
+AMPEL="${AMPEL:-$(command -v ampel || echo "$BUILD_DIR/ampel")}"
+SERVER_ARGS=()
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --rehearsal) REHEARSAL=1 ;;
+    --collector) COLLECTOR="$2"; shift ;;
+    --policy) POLICY="$2"; shift ;;
+    --sign-vsa) SIGN_VSA=1 ;;
+    --no-serve) SERVE=0 ;;
+    --port) PORT="$2"; shift ;;
+    --) shift; SERVER_ARGS=("$@"); break ;;
+    -h|--help) sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -*) echo "unknown option $1" >&2; exit 2 ;;
+    *) MODEL="$1" ;;
+  esac
+  shift
+done
+
+[ -x "$AMPEL" ] || { echo "error: ampel not found (brew install carabiner-dev/tap/ampel)" >&2; exit 2; }
+[ -f "$MODEL" ] || { echo "error: model $MODEL not found" >&2; exit 2; }
+
+status() {  # status <pass|fail|ungated> <message>
+  printf '{"status":"%s","message":"%s","model":"%s","sha256":"%s","time":"%s"}\n' \
+    "$1" "$2" "$(basename "$MODEL")" "$(shasum -a 256 "$MODEL" | cut -c1-64)" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$STATUS"
+}
+
+ARGS=(verify model "$MODEL" -p "$POLICY" --attest-results --attest-format vsa --results-path "$VSA")
+if [ "$REHEARSAL" = 1 ]; then
+  for f in "$ATT"/*.intoto.json; do ARGS+=(-a "$f"); done
+  ARGS+=(-x requireSignature:false)
+  mode="REHEARSAL (unsigned statements admitted)"
+else
+  ARGS+=(-c "${COLLECTOR:-fs:$ATT}")
+  mode="signed bundles from ${COLLECTOR:-fs:$ATT}"
+fi
+[ "$SIGN_VSA" = 1 ] && ARGS+=(--sign)
+
+echo "🚦 model-admit: $(basename "$MODEL") — $mode" >&2
+"$AMPEL" "${ARGS[@]}" 2> >(grep -v "admitting it because it was passed explicitly" >&2)
+rc=$?
+
+if [ $rc -ne 0 ]; then
+  status fail "AMPEL policy CRUSTADVISOR-MODEL-ADMIT failed"
+  echo "🔴 model-admit: REFUSED. The model will not be served. VSA: $VSA" >&2
+  exit 1
+fi
+
+status pass "AMPEL policy CRUSTADVISOR-MODEL-ADMIT passed"
+echo "🟢 model-admit: ADMITTED. VSA: $VSA" >&2
+[ "$SERVE" = 1 ] || exit 0
+
+echo "🍕 starting llama-server on port $PORT" >&2
+exec llama-server -m "$MODEL" --jinja --host 127.0.0.1 --port "$PORT" -c 4096 "${SERVER_ARGS[@]}"

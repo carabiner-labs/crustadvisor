@@ -1,0 +1,171 @@
+{
+    // CrustAdvisor model admission policy. One policy per rung of the ladder,
+    // one tenet per check, so that a failure shows exactly which rung gave
+    // way. All four must pass for the model to be served.
+    id: CRUSTADVISOR-MODEL-ADMIT
+
+    meta: {
+        name: "CrustAdvisor Model Admission"
+        description: "The model about to be served carries a verified OpenSSF Model Signing signature from our build, was built from the pinned upstream model, and is described by an ML-BOM we accept"
+        frameworks: [
+            { id: "SLSA", name: "Supply-Chain Levels for Software Artifacts" }
+        ]
+    }
+
+    common: {
+        context: {
+            // Set to "false" for local rehearsals with unsigned attestations
+            // (ampel verify ... -x requireSignature:false). On stage it stays
+            // "true" and only sigstore-signed evidence from the CI workflow
+            // satisfies the first two rungs. A string, because values given
+            // on the command line arrive as strings.
+            requireSignature: { required: true, default: "true" }
+
+            // Who is allowed to have signed the attestations: the model-build
+            // workflow of this repository, running on GitHub Actions.
+            signerIssuer: { required: true, default: "https://token.actions.githubusercontent.com" }
+            signerIdentity: { required: true, default: "^https://github.com/carabiner-labs/crustadvisor/.github/workflows/model-build.yml@refs/(heads/main|tags/v[0-9.]+)$" }
+
+            // The one upstream model the build may consume, pinned to a commit.
+            modelRepo: { required: true, default: "Qwen/Qwen2.5-1.5B-Instruct" }
+            modelRevision: { required: true, default: "989aa7980e4cf806f80c7fef2b1adb7bc71aa306" }
+
+            // What the ML-BOM may say about the model and its base.
+            allowedLicenses: { default: [ "Apache-2.0", "MIT" ] }
+            allowedFormats: { default: [ "gguf", "safetensors" ] }
+        }
+    }
+
+    policies: [
+        {
+            // Rung 1: the model is signed. An OpenSSF Model Signing (OMS)
+            // statement is bound to the exact OMS digest of the file about to
+            // be served, and its sigstore signature verifies. A file whose
+            // bytes changed after signing matches no statement at all, and
+            // this is the rung that reports it.
+            id: SIGNATURE
+            meta: {
+                name: "Signed Model"
+                description: "OpenSSF Model Signing statement bound to this exact file, with a verified signature"
+                controls: [ { framework: "SLSA", class: "BUILD", id: "LEVEL_1" } ]
+            }
+            predicates: { types: [ "https://model_signing/signature/v1.0" ] }
+            tenets: [
+                {
+                    id: signed
+                    outputs: {
+                        method: { code: "size(predicates) > 0 && has(predicate.data.serialization.method) ? predicate.data.serialization.method : ''" }
+                    }
+                    code: "size(predicates) > 0 && outputs.method == 'files' && (context.requireSignature == 'false' || predicate.verification.verified)"
+                    assessment: { message: "Model signature bound to this file verifies (OMS {{ .Outputs.method }} serialization)" }
+                    error: {
+                        message: "No verified model signature for this file"
+                        guidance: "Either the file changed after it was signed (its digest matches no signature) or the signature is not verifiable. Pull the signed model again."
+                    }
+                }
+            ]
+        }
+
+        {
+            // Rung 2: the right party signed it. Signatures prove integrity,
+            // identity proves authority: only our CI workflow may vouch for a
+            // model.
+            id: SIGNER-IDENTITY
+            meta: {
+                name: "Trusted Signer"
+                description: "The model signature was produced by the CrustAdvisor model-build workflow"
+                controls: [ { framework: "SLSA", class: "BUILD", id: "LEVEL_2" } ]
+            }
+            predicates: { types: [ "https://model_signing/signature/v1.0" ] }
+            tenets: [
+                {
+                    id: trusted-signer
+                    outputs: {
+                        signerIds: {
+                            code: "size(predicates) > 0 && size(predicate.?verification.?signers.orValue([])) > 0 ? predicate.verification.signers.filter(s, has(s.sigstore)).map(s, s.sigstore.identity) : ['(unsigned: rehearsal mode)']"
+                        }
+                    }
+                    code: "size(predicates) > 0 && size(outputs.signerIds) > 0 && (context.requireSignature == 'false' || predicate.verification.signers.exists(s, has(s.sigstore) && s.sigstore.issuer == context.signerIssuer && s.sigstore.identity.matches(context.signerIdentity)))"
+                    assessment: { message: "Signed by the model-build workflow: {{ .Outputs.signerIds }}" }
+                    error: {
+                        message: "The model was not signed by the model-build workflow"
+                        guidance: "Expected a sigstore identity matching {{ .Context.signerIdentity }}, found {{ .Outputs.signerIds }}"
+                    }
+                }
+            ]
+        }
+
+        {
+            // Rung 3: it was built from the model we think it was. The build
+            // records what it pulled from Hugging Face as a resolved
+            // dependency; it must be the pinned repository at the pinned
+            // commit. A look-alike repository, or the right one at another
+            // revision, fails here even though the file is validly signed.
+            id: PROVENANCE-MATERIALS
+            meta: {
+                name: "Pinned Upstream Model"
+                description: "The build consumed the pinned Hugging Face model at the pinned revision"
+                controls: [ { framework: "SLSA", class: "BUILD", id: "LEVEL_2" } ]
+            }
+            predicates: { types: [ "https://slsa.dev/provenance/v1" ] }
+            tenets: [
+                {
+                    id: pinned-upstream
+                    outputs: {
+                        materials: {
+                            code: "size(predicates) > 0 && has(predicate.data.buildDefinition.resolvedDependencies) ? predicate.data.buildDefinition.resolvedDependencies.filter(d, d.uri.startsWith('https://huggingface.co/')).map(d, d.uri) : []"
+                        }
+                    }
+                    code: "outputs.materials.exists(uri, uri == 'https://huggingface.co/' + context.modelRepo + '@' + context.modelRevision)"
+                    assessment: { message: "Built from {{ .Context.modelRepo }} @ {{ .Context.modelRevision }}" }
+                    error: {
+                        message: "The model was not built from the pinned upstream"
+                        guidance: "Expected https://huggingface.co/{{ .Context.modelRepo }}@{{ .Context.modelRevision }}, the provenance says {{ .Outputs.materials }}"
+                    }
+                }
+            ]
+        }
+
+        {
+            // Rung 4: the bill of materials says things we accept. Every
+            // model component carries a license on the allow list and comes
+            // in a format on the allow list (no pickle files).
+            id: ML-BOM
+            meta: {
+                name: "Acceptable ML-BOM"
+                description: "The model and its base model are licensed and serialized in ways we accept"
+            }
+            predicates: { types: [ "https://cyclonedx.org/bom" ] }
+            tenets: [
+                {
+                    id: licenses
+                    outputs: {
+                        licenses: {
+                            code: "size(predicates) > 0 ? ([predicate.data.metadata.component] + predicate.data.components).filter(c, c.type == 'machine-learning-model').map(c, has(c.licenses) && size(c.licenses) > 0 ? c.licenses[0].license.id : '') : []"
+                        }
+                    }
+                    code: "size(outputs.licenses) > 0 && outputs.licenses.all(l, l in context.allowedLicenses)"
+                    assessment: { message: "Model licenses on the allow list: {{ .Outputs.licenses }}" }
+                    error: {
+                        message: "A model component is missing a license or carries one we do not accept"
+                        guidance: "Allowed: {{ .Context.allowedLicenses }}, found: {{ .Outputs.licenses }}"
+                    }
+                }
+                {
+                    id: formats
+                    outputs: {
+                        formats: {
+                            code: "size(predicates) > 0 ? ([predicate.data.metadata.component] + predicate.data.components).filter(c, c.type == 'machine-learning-model').map(c, has(c.properties) ? c.properties.filter(p, p.name == 'crustadvisor:format').map(p, p.value) : []).map(f, size(f) > 0 ? f[0] : '') : []"
+                        }
+                    }
+                    code: "size(outputs.formats) > 0 && outputs.formats.all(f, f in context.allowedFormats)"
+                    assessment: { message: "Model formats on the allow list: {{ .Outputs.formats }}" }
+                    error: {
+                        message: "A model component is in a format we do not serve"
+                        guidance: "Allowed: {{ .Context.allowedFormats }} (no pickle), found: {{ .Outputs.formats }}"
+                    }
+                }
+            ]
+        }
+    ]
+}

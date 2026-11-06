@@ -11,7 +11,7 @@ chat template.
 | Pinned revision | `989aa7980e4cf806f80c7fef2b1adb7bc71aa306` (the provenance material) |
 | Converter | llama.cpp `v0.9.0`, `convert_hf_to_gguf.py` |
 | Quantization | `Q4_K_M` |
-| Output | `build/crustadvisor-q4_k_m.gguf` + `build/build-info.json` |
+| Output | `build/crustadvisor-q4_k_m.gguf`, `build/build-info.json`, `build/attestations/` |
 
 ## Files
 
@@ -28,7 +28,14 @@ chat template.
 - `metadata.json` — `general.*` GGUF metadata overrides (name, license, source).
 - `build.sh` — the whole pipeline: clone llama.cpp at the pinned tag, create a
   Python venv with `uv`, pull the snapshot at the pinned revision, enrich,
-  convert to f16 GGUF, quantize, record hashes.
+  convert to f16 GGUF, quantize, record hashes, write the statements.
+- `attest.py` — writes three unsigned in-toto statements to
+  `build/attestations/`, all with the model's OpenSSF Model Signing root
+  digest as subject: the OMS statement itself, SLSA v1 provenance (resolved
+  dependencies: the HF snapshot at its revision, llama.cpp, this repo) and a
+  CycloneDX 1.6 ML-BOM. They record what the build really used.
+- `sign.sh` — signs the model with `model_signing sign sigstore` (the OMS
+  bundle) and the two statements with `bnd statement`. See `admit/README.md`.
 
 ## Run
 

@@ -33,9 +33,13 @@ The full plan is in [CRUSTADVISOR.md](CRUSTADVISOR.md).
 See `make help` once the pieces land. The intended loop is:
 
 ```
-make model        # pull Qwen2.5-1.5B-Instruct @ pinned SHA, convert to GGUF Q4_K_M
-make serve        # model-admit → ampel verify → llama-server → app
-make tamper       # PPM post-build tamper of the GGUF chat template
-make serve-unsafe # serve WITHOUT the gate (what most of the industry does today)
-make reset        # back to a clean, signed model
+make model                        # pull Qwen2.5-1.5B-Instruct @ pinned SHA, enrich, GGUF Q4_K_M, statements
+make sign                         # OMS-sign the model and the statements with sigstore
+make serve                        # model-admit → ampel verify model → llama-server → app
+make serve ADMIT_FLAGS=--rehearsal  # same, admitting the unsigned statements (dev)
+make tamper                       # PPM post-build tamper of the GGUF chat template
+make tamper-build                 # PPM typosquat build
+make serve-unsafe                 # serve WITHOUT the gate (what most of the industry does today)
+make admit-rehearsal              # just the per-rung verdict
+make reset                        # back to a clean, signed model
 ```
