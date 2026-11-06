@@ -22,4 +22,7 @@ jobs:
       id-token: write   # sigstore keyless signing
     uses: slsa-framework/source-actions/.github/workflows/compute_slsa_source.yml@main
     with:
-      version: v0.7.2
+      # v0.7.1: the last release that publishes its provenance as
+      # sourcetool.intoto.jsonl, the name this reusable workflow downloads.
+      # v0.7.2 renamed it to attestations.intoto.jsonl and 404s here.
+      version: v0.7.1
