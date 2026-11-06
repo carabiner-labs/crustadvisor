@@ -63,19 +63,15 @@ jobs:
         with:
           version: v0.4.7
 
-      - name: Install slsa-attester
-        # The SLSA attester writes and signs the provenance. Its release is
-        # verified against the provenance the slsa-framework/actions
-        # identity signed for it, before it is trusted to sign ours.
-        uses: carabiner-dev/actions/install/download-and-verify@63d43b57262e65927864c8f7ca0a6a8efe06acc0 # v1.3.1
+      - name: Install ampel
+        # provenance.sh downloads slsa-attester at its pinned release and
+        # verifies it with ampel against the provenance slsa-framework/actions
+        # signed for it, before trusting it to write ours. (The generic
+        # Carabiner installer cannot be used for the attester yet: its smoke
+        # test runs `<tool> version`, which the attester does not have.)
+        uses: carabiner-dev/actions/install/ampel@63d43b57262e65927864c8f7ca0a6a8efe06acc0 # v1.3.1
         with:
-          tool: slsa-attester
-          repo: attester
-          orgs: slsa-framework
-          version: v0.1.1
-          attestation-file: attestations.intoto.jsonl
-          signers: "sigstore::https://token.actions.githubusercontent.com::https://github.com/slsa-framework/actions/.github/workflows/attest_actions.yml@refs/heads/main"
-          context: "buildPoint:git+https://github.com/slsa-framework/attester"
+          version: v1.5.0
 
       - name: Build the model
         # Pulls the pinned snapshot, enriches, converts, quantizes, writes the
