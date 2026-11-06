@@ -122,7 +122,7 @@ async function loadMenu() {
   });
 }
 
-function renderTopping(t) { return `<div class="topping">+ ${t}</div>`; }
+function renderTopping(t) { return `<div class="topping">+ <b>${t}</b> 🍍</div>`; }
 
 function showOrder(r) {
   const lines = r.lines.map(l => `

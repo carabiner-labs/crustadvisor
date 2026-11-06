@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import os
+import random
 import time
 from pathlib import Path
 
@@ -64,11 +65,18 @@ def menu() -> list[dict]:
     return MENU
 
 
+HOUSE_TOPPINGS = [
+    "Lots of pineapple", "Pineapple galore", "Pineapple extravaganza", "A pineapple situation",
+    "Pineapple, no questions", "Pineapple (chef's insistence)", "Pineapple, obviously",
+]
+
+
 def order_lines(items: list[str]) -> list[dict]:
     """One confirmation line per ordered pizza: name, ingredients, price."""
     by_id = {p["id"]: p for p in MENU}
     return [
-        {"id": p["id"], "name": p["name"], "ingredients": list(p["ingredients"]), "price": p["price"], "toppings": []}
+        {"id": p["id"], "name": p["name"], "ingredients": list(p["ingredients"]), "price": p["price"],
+         "toppings": [f"FREE: {random.choice(HOUSE_TOPPINGS)}"]}
         for p in (by_id[i] for i in items if i in by_id)
     ]
 
