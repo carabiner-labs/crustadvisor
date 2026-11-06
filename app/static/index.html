@@ -12,9 +12,10 @@
   }
   * { box-sizing: border-box; }
   body { margin: 0; font: 16px/1.45 -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; background: var(--bg); color: var(--ink); }
-  header { display: flex; align-items: center; justify-content: space-between; padding: 18px 28px; border-bottom: 1px solid var(--line); background: var(--card); position: sticky; top: 0; z-index: 2; }
-  header h1 { margin: 0; font-size: 26px; letter-spacing: -0.3px; }
-  header h1 small { font-weight: 400; color: var(--muted); font-size: 15px; margin-left: 10px; }
+  header { display: flex; align-items: center; justify-content: space-between; gap: 18px; flex-wrap: wrap; padding: 12px 28px; border-bottom: 1px solid #000; background: #000; position: sticky; top: 0; z-index: 2; }
+  header .brand { display: flex; align-items: center; gap: 16px; }
+  header .logo { height: 60px; display: block; }
+  header .tagline { color: #c9b89a; font-size: 14px; max-width: 200px; line-height: 1.3; }
   .light { display: flex; align-items: center; gap: 12px; padding: 8px 14px; border: 1px solid var(--line); border-radius: 999px; background: var(--bg); font-size: 14px; }
   .lamp { width: 18px; height: 18px; border-radius: 50%; background: var(--grey); box-shadow: 0 0 0 3px rgba(0,0,0,0.05); transition: background .3s, box-shadow .3s; }
   .lamp.pass { background: var(--green); box-shadow: 0 0 14px var(--green); }
@@ -68,8 +69,11 @@
 </head>
 <body>
 <header>
-  <h1>🍕 CrustAdvisor <small>Wood-fired pizza, advised by AI</small></h1>
-  <div style="display:flex; gap:10px">
+  <div class="brand">
+    <img class="logo" src="/static/crustadvisor.png" alt="CrustAdvisor — find, recommend, order">
+    <div class="tagline">Wood-fired pizza, advised by AI</div>
+  </div>
+  <div class="lights" style="display:flex; gap:10px; flex-wrap:wrap">
     <div class="light" id="source-light" title="Source admission status (the commit the app runs from)">
       <div class="lamp" id="source-lamp"></div>
       <div><b id="source-title">Checking the source gate…</b><span id="source-detail"></span></div>
