@@ -24,7 +24,7 @@ if [ "$UNSAFE" = 1 ]; then
   make -s serve-unsafe &
 else
   # The app is built from HEAD; HEAD must carry source provenance first.
-  admit/source-admit || { echo "🔴 the app will not start from this commit" >&2; exit 1; }
+  admit/source-admit || { trap - INT TERM EXIT; echo "🔴 the app will not start from this commit" >&2; exit 1; }
   admit/model-admit "${ARGS[@]}" &
 fi
 

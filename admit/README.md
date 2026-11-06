@@ -1,7 +1,14 @@
-# admit/ — the policy gate
+# admit/ — the policy gates
 
-`model-admit` is the laptop's admission controller. Before anything is served
-it runs
+Two gates, one engine. `model-admit` admits the model (act 1), `source-admit`
+admits the commit the app is built from (act 2). Both are small wrappers
+around `ampel verify`, both write a status file the app's traffic lights
+read, and both leave a SLSA Verification Summary Attestation behind.
+
+## model-admit
+
+`model-admit` is the laptop's admission controller for the model. Before
+anything is served it runs
 
 ```
 ampel verify model build/crustadvisor-q4_k_m.gguf -p admit/policy.hjson -c fs:build/attestations
@@ -67,3 +74,37 @@ model: `required attestations missing`, exactly as they should.
 Any ampel ≥ 1.4 works: `brew install carabiner-dev/tap/ampel`, or build from
 a checkout with `go build -o build/ampel ./cmd/ampel`. `model-admit` uses
 `$AMPEL`, then `ampel` on `PATH`, then `build/ampel`.
+
+## source-admit
+
+Before the app is built or started, the commit it would run from must carry
+SLSA source provenance: evidence, signed by the SLSA source workflow, that
+the revision landed on `main` through the repository's process.
+
+```
+ampel verify gitCommit:<HEAD> -p admit/source-policy.hjson -c dnote:https://github.com/carabiner-labs/crustadvisor
+```
+
+The evidence lives in the commit's git note, written by
+`.github/workflows/slsa-source.yml` (the reusable workflow from
+`slsa-framework/source-actions`) on every push to `main`. AMPEL's dynamic
+git-notes collector fetches the note for whatever commit is the subject. A
+commit made on a laptop and never pushed through that workflow has no note,
+and the gate refuses it in about a second.
+
+```
+admit/source-admit                   # HEAD, notes from origin
+admit/source-admit origin/main       # any commit
+admit/source-admit --local           # notes from this clone (git fetch origin 'refs/notes/*:refs/notes/*' first)
+```
+
+`source-policy.hjson`, one policy per rung:
+
+| Rung | Policy | Evidence | Catches |
+| --- | --- | --- | --- |
+| 1 | `SOURCE-PROVENANCE` | source provenance about this repo and `refs/heads/main`, signed by `source-actions/.github/workflows/compute_slsa_source.yml@refs/heads/main` | a commit that never went through the branch: the PPM's |
+| 2 | `SOURCE-LEVEL` | the source workflow's verification summary, `PASSED` at `minLevel` or above | a repository whose controls lapsed |
+
+`minLevel` is 1 until the repository is onboarded with `sourcetool setup repo`
+(branch protection, required review, tag rules), after which it can be raised
+and the provenance's `controls` list will show why.
