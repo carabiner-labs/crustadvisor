@@ -71,6 +71,10 @@
       <div class="lamp" id="source-lamp"></div>
       <div><b id="source-title">Checking the source gate…</b><span id="source-detail"></span></div>
     </div>
+    <div class="light" id="image-light" title="Image admission status (the base image the app is built on)">
+      <div class="lamp" id="image-lamp"></div>
+      <div><b id="image-title">Checking the image gate…</b><span id="image-detail"></span></div>
+    </div>
     <div class="light" id="light" title="Model admission status">
       <div class="lamp" id="lamp"></div>
       <div><b id="light-title">Checking the model gate…</b><span id="light-detail"></span></div>
@@ -79,7 +83,7 @@
 </header>
 <main>
   <section>
-    <h2>Tonight's menu</h2>
+    <h2>Tonight's menu <button class="ghost" id="veg-filter" style="float:right; font-size:13px">🌱 vegetarian only</button></h2>
     <div class="grid" id="menu"></div>
   </section>
   <section class="chat">
@@ -105,9 +109,10 @@ const SUGGESTIONS = [
 
 function toast(text) { const t = $("#toast"); t.textContent = text; t.classList.add("show"); setTimeout(() => t.classList.remove("show"), 2200); }
 
+let vegOnly = false;
 async function loadMenu() {
   const menu = await (await fetch("/api/menu")).json();
-  $("#menu").innerHTML = menu.map(p => `
+  $("#menu").innerHTML = menu.filter(p => !vegOnly || p.tags.includes("vegetarian")).map(p => `
     <div class="pizza">
       <h3><span>${p.name}</span><span>$${p.price}</span></h3>
       <p>${p.description}</p>
@@ -177,8 +182,15 @@ async function pollStatus() {
     const stitles = { pass: "Source admitted", fail: "Source REFUSED by the gate", ungated: "Source UNGATED", unknown: "Source gate has not run" };
     $("#source-title").textContent = stitles[src.status] || src.status;
     $("#source-detail").textContent = src.subject ? `commit ${src.subject.slice(0, 44)}` : "";
+    const img = s.image || {}; const ilamp = $("#image-lamp");
+    $("#image-light").style.display = img.status && img.status !== "unknown" ? "" : "none";
+    ilamp.className = "lamp " + (img.status || "");
+    const ititles = { pass: "Image admitted", fail: "Image REFUSED by the gate", ungated: "Image UNGATED", unknown: "Image gate has not run" };
+    $("#image-title").textContent = ititles[img.status] || img.status;
+    $("#image-detail").textContent = img.digest ? `base ${img.digest.replace("sha256:", "").slice(0, 12)}` : "";
   } catch (e) { $("#light-title").textContent = "API unreachable"; }
 }
+$("#veg-filter").addEventListener("click", (e) => { vegOnly = !vegOnly; e.target.textContent = vegOnly ? "🍕 show everything" : "🌱 vegetarian only"; loadMenu(); });
 loadMenu(); pollStatus(); setInterval(pollStatus, 3000);
 </script>
 </body>

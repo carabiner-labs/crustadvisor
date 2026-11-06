@@ -44,6 +44,8 @@ make serve-unsafe                 # the gates exist but are skipped: amber light
 make serve ADMIT_FLAGS=--rehearsal  # model gate admits the unsigned statements (dev)
 make tamper                       # PPM post-build tamper of the GGUF chat template
 make tamper-build                 # PPM typosquat build
+make build-base                  # act 3: clean base image + signed provenance
+make tamper-image                 # PPM act 3: hijack the base image tag
 make swap-ppm                     # put the pre-built typosquat model in place
 make tamper-app                   # PPM act 2: the malicious commit on the ordering code
 make reset-app                    # drop it again
