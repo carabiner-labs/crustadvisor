@@ -1,0 +1,10 @@
+[project]
+name = "crust-receipt"
+version = "1.1.0"
+description = "CrustAdvisor order receipts: itemize an order and total it."
+requires-python = ">=3.12"
+dependencies = []
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

@@ -1,0 +1,57 @@
+{
+    // CrustAdvisor dependency admission policy. Before the app is built, the
+    // SBOM of its declared dependencies must list only packages at versions we
+    // allow. A poisoned release pulled in by a version bump shows up here as a
+    // version that is not on the list.
+    id: CRUSTADVISOR-DEP-ADMIT
+
+    meta: {
+        name: "CrustAdvisor Dependency Admission"
+        description: "The app's dependency SBOM lists crust-receipt only at an allowed version"
+        frameworks: [
+            { id: "SLSA", name: "Supply-Chain Levels for Software Artifacts" }
+        ]
+    }
+
+    common: {
+        context: {
+            // The crust-receipt versions the app is allowed to ship. A bump to
+            // anything else, the way a poisoned release arrives, fails here.
+            allowedVersions: { default: [ "1.0.0" ] }
+        }
+    }
+
+    policies: [
+        {
+            // One rung: the dependency is present and pinned to an allowed
+            // version. ampel parses the SPDX SBOM into protobom, so the same
+            // code would read a CycloneDX SBOM too.
+            id: DEP-PINNED
+            meta: {
+                name: "Pinned Dependency"
+                description: "crust-receipt is present in the SBOM at an allowed version"
+            }
+            predicates: {
+                types: [
+                    "https://spdx.dev/Document"
+                    "https://spdx.dev/Document/v3"
+                    "https://cyclonedx.org/bom"
+                ]
+            }
+            tenets: [
+                {
+                    id: allowed-version
+                    outputs: {
+                        versions: { code: "size(predicates) > 0 ? sboms[0].get_node_list().get_nodes().filter(n, n.name == 'crust-receipt').map(n, n.version) : []" }
+                    }
+                    code: "size(outputs.versions) > 0 && outputs.versions.all(v, v in context.allowedVersions)"
+                    assessment: { message: "crust-receipt {{ .Outputs.versions }} is on the allow list" }
+                    error: {
+                        message: "The app depends on a crust-receipt version we do not allow"
+                        guidance: "Allowed: {{ .Context.allowedVersions }}, found {{ .Outputs.versions }}. A poisoned release arrives as a version bump; restore the pin (attack/ppm-dependency.sh --undo)."
+                    }
+                }
+            ]
+        }
+    ]
+}

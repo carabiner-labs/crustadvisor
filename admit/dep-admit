@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+# dep-admit: the dependency gate. Before the app is built, the SBOM of its
+# declared dependencies (app/requirements.txt) must list crust-receipt only at
+# an allowed version. A poisoned release pulled in by a version bump fails.
+#
+# unpack generates an SPDX SBOM from the manifest; ampel checks it against
+# admit/dep-policy.hjson, keyed on the manifest's own hash as the subject.
+#
+# Usage: dep-admit [--manifest app/requirements.txt] [--policy FILE] [-x K:V]
+set -uo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+BUILD_DIR="${BUILD_DIR:-$ROOT/build}"
+MANIFEST="$ROOT/app/requirements.txt"
+POLICY="$ROOT/admit/dep-policy.hjson"
+UNPACK="${UNPACK:-$BUILD_DIR/bin/unpack}"
+AMPEL="${AMPEL:-$(command -v ampel || echo "$BUILD_DIR/ampel")}"
+WORK="$BUILD_DIR/dep"
+STATUS="$BUILD_DIR/dep-status.json"
+VSA="$BUILD_DIR/dep-vsa.intoto.json"
+CONTEXT=()
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --manifest) MANIFEST="$2"; shift ;;
+    --policy) POLICY="$2"; shift ;;
+    -x) CONTEXT+=(-x "$2"); shift ;;
+    -h|--help) sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -*) echo "unknown option $1" >&2; exit 2 ;;
+  esac
+  shift
+done
+
+[ -x "$UNPACK" ] || { echo "error: unpack not at $UNPACK" >&2; exit 2; }
+[ -x "$AMPEL" ] || { echo "error: ampel not found" >&2; exit 2; }
+[ -f "$MANIFEST" ] || { echo "error: no manifest $MANIFEST (run packages/build-wheels.sh)" >&2; exit 2; }
+
+DIGEST="$(shasum -a 256 "$MANIFEST" | cut -d' ' -f1)"
+rm -rf "$WORK"; mkdir -p "$WORK/src"
+cp "$MANIFEST" "$WORK/src/requirements.txt"
+
+echo "🚦 dep-admit: $(basename "$MANIFEST") (sha256:${DIGEST:0:12}…)" >&2
+"$UNPACK" extract --format=spdx "$WORK/src" > "$WORK/sbom.spdx.json" 2>/dev/null
+python3 "$ROOT/admit/sbom-wrap.py" "$WORK/sbom.spdx.json" crustadvisor-deps "$DIGEST" "$WORK/sbom.spdx.intoto.json"
+
+status() {
+  printf '{"status":"%s","message":"%s","manifest":"%s","digest":"%s","time":"%s"}\n' \
+    "$1" "$2" "$(basename "$MANIFEST")" "$DIGEST" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$STATUS"
+}
+
+"$AMPEL" verify "sha256:$DIGEST" -p "$POLICY" -a "$WORK/sbom.spdx.intoto.json" \
+  --attest-results --attest-format vsa --results-path "$VSA" "${CONTEXT[@]}" 2> >(grep -v "unsigned or its signature" >&2)
+rc=$?
+if [ $rc -ne 0 ]; then
+  status fail "AMPEL policy CRUSTADVISOR-DEP-ADMIT failed"
+  echo "🔴 dep-admit: REFUSED. The app will not be built with these dependencies. VSA: $VSA" >&2
+  exit 1
+fi
+status pass "AMPEL policy CRUSTADVISOR-DEP-ADMIT passed"
+echo "🟢 dep-admit: ADMITTED. VSA: $VSA" >&2
