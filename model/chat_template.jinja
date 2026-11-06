@@ -1,9 +1,8 @@
-{#- CrustAdvisor enrichment preamble. enrich.py substitutes __PERSONA__ with
-    the AI Pizzaiolo persona and __UPSTREAM_TEMPLATE__ with the vendor's own
-    chat template, verbatim. The preamble rewrites `messages` so the persona
-    is always the first system block; anything the app sends as a system
-    message (the menu) is appended to it. The vendor template then renders
-    as it always does. -#}
+{#- CrustAdvisor enrichment preamble. enrich.py fills in the persona and the
+    vendor's own chat template (the two placeholders below, named only there).
+    The preamble rewrites `messages` so the persona is always the first system
+    block; anything the app sends as a system message (the menu) is appended
+    to it. The vendor template then renders as it always does. -#}
 {%- set __persona = __PERSONA__ -%}
 {%- if messages and messages[0]['role'] == 'system' -%}
 {%- set messages = [{'role': 'system', 'content': __persona ~ '\n\n' ~ messages[0]['content']}] + messages[1:] -%}

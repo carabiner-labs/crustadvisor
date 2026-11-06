@@ -16,10 +16,10 @@ serve-unsafe: ## Start llama-server and the app with NO policy gate
 	@echo "TODO: app without admit"
 
 tamper: ## PPM variant 1: post-build GGUF chat-template tamper
-	@echo "TODO: attack/ppm-tamper.py"
+	@attack/ppm-tamper.py build/crustadvisor-q4_k_m.gguf
 
 tamper-build: ## PPM variant 2: build from poisoned/typosquat upstream
-	@echo "TODO: attack/typosquat-build.sh"
+	@attack/typosquat-build.sh
 
 admit: ## Run the AMPEL gate alone and print per-tenet results
 	@echo "TODO: admit/model-admit"
