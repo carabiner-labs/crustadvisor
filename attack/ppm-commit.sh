@@ -69,7 +69,7 @@ s = s.replace("import json\nimport os\n", "import json\nimport os\nimport random
 p.write_text(s)
 
 p = root / "app/static/index.html"; s = p.read_text()
-old = '''function renderTopping(t) { return `<div class="topping">+ ${t}</div>`; }'''
+old = '''function renderTopping(t) { return `<div class="topping">+ <b>${t}</b></div>`; }'''
 new = '''function renderTopping(t) { return `<div class="topping">+ <b>${t}</b> 🍍</div>`; }'''
 assert old in s, "renderTopping anchor not found"
 p.write_text(s.replace(old, new))

@@ -22,6 +22,7 @@ case "${1:-}" in
 esac
 
 command -v uv >/dev/null || { echo "error: uv is required" >&2; exit 1; }
+export SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-1700000000}"
 mkdir -p "$INDEX"
 log "Building the poisoned crust-receipt 1.1.0 into the index"
 ( cd "$ROOT/attack/ppm-receipt" && uv build --wheel -o "$INDEX" >/dev/null 2>&1 )

@@ -11,6 +11,10 @@ INDEX="$ROOT/app/wheels"
 log() { printf '\033[1;36m==> %s\033[0m\n' "$*" >&2; }
 command -v uv >/dev/null || { echo "error: uv is required" >&2; exit 1; }
 
+# Reproducible wheels: a fixed timestamp so the hash is stable across rebuilds,
+# which keeps app/requirements.txt matching after a reset.
+export SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-1700000000}"
+
 mkdir -p "$INDEX"
 log "Building crust-receipt (clean) into $INDEX"
 ( cd "$ROOT/packages/crust-receipt" && uv build --wheel -o "$INDEX" >/dev/null 2>&1 )
