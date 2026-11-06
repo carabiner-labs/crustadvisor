@@ -36,15 +36,27 @@ gate() { # gate <name> ; echo pass/fail via exit code
   esac
 }
 
-expect_green() { # all four gates admit
-  for g in source dependency image model; do
+# SRC_OK: whether HEAD carries a verified source note, so source gate verdicts
+# are meaningful. When it does not (HEAD not yet pushed and attested), the
+# source gate checks are skipped and only the commit apply/reset mechanic is
+# asserted. The other three gates are always fully checked.
+SRC_OK=0
+
+expect_green() { # gates admit a clean subject
+  for g in dependency image model; do
     if gate "$g"; then ok "$g gate admits (clean)"; else no "$g gate refused a clean subject"; fi
   done
+  if [ "$SRC_OK" = 1 ]; then
+    if gate source; then ok "source gate admits (clean)"; else no "source gate refused a clean subject"; fi
+  fi
 }
-expect_refuse() { # all four gates refuse
-  for g in source dependency image model; do
+expect_refuse() { # gates refuse a tampered subject
+  for g in dependency image model; do
     if gate "$g"; then no "$g gate admitted a tampered subject"; else ok "$g gate refused its tamper"; fi
   done
+  if [ "$SRC_OK" = 1 ]; then
+    if gate source; then no "source gate admitted a tampered subject"; else ok "source gate refused its tamper"; fi
+  fi
 }
 
 apply_all_tampers() {
@@ -62,6 +74,7 @@ echo "========================================================"
 
 echo "[0] baseline — clean state should pass every gate"
 make -s reset >/dev/null 2>&1
+if gate source; then SRC_OK=1; grn "  (source gate active: HEAD is attested)"; else red "  (source gate skipped: HEAD is not attested; push it and let slsa-source run for the full check)"; fi
 expect_green
 
 for i in $(seq 1 "$CYCLES"); do
