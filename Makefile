@@ -5,7 +5,10 @@ SHELL := /bin/bash
 
 # Set ADMIT_FLAGS=--rehearsal to admit the unsigned statements written by the
 # build (development). Without it only signed bundles count (stage).
+# GATES selects which gates the service has: source,model (all), source, or
+# empty for none. A gate that does not exist has no light in the app.
 ADMIT_FLAGS ?=
+GATES ?= source,model
 AMPEL ?= $(shell command -v ampel 2>/dev/null || echo build/ampel)
 export AMPEL
 
@@ -32,14 +35,11 @@ pull: ## Pull the published model (REF=...), make it known-good, run the gate
 app: ## Start the web app alone on http://127.0.0.1:8000
 	@cd app && uv run --quiet uvicorn main:app --host 127.0.0.1 --port 8000
 
-serve: ## Gate the model, start llama-server and the app (ADMIT_FLAGS=--rehearsal for dev)
-	@demo/serve.sh $(ADMIT_FLAGS)
+serve: ## Run the gates in GATES (default source,model), then llama-server and the app
+	@demo/serve.sh --gates=$(GATES) $(ADMIT_FLAGS)
 
-serve-unsafe: ## Start llama-server with NO policy gate (what most of the industry does today); add the app with demo/serve.sh --unsafe
-	@printf '{"status":"ungated","message":"served without model-admit","model":"crustadvisor-q4_k_m.gguf","sha256":"%s","time":"%s"}\n' \
-	  "$$(shasum -a 256 build/crustadvisor-q4_k_m.gguf | cut -c1-64)" "$$(date -u +%Y-%m-%dT%H:%M:%SZ)" > build/admit-status.json
-	@echo "⚠️  serving UNGATED" >&2
-	@llama-server -m build/crustadvisor-q4_k_m.gguf --jinja --host 127.0.0.1 --port 8080 -c 4096
+serve-unsafe: ## Same stack with the gates in GATES skipped (their lights go amber)
+	@demo/serve.sh --gates=$(GATES) --unsafe
 
 tamper: ## PPM variant 1: post-build GGUF chat-template tamper (in place, ~6s)
 	@test -f build/pristine/crustadvisor-q4_k_m.gguf || demo/reset.sh --save

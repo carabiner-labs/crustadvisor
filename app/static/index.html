@@ -164,12 +164,15 @@ async function pollStatus() {
   try {
     const s = await (await fetch("/api/status")).json();
     const g = s.gate || {}; const lamp = $("#lamp");
+    // A gate that has not run has no light: it does not exist yet.
+    $("#light").style.display = g.status && g.status !== "unknown" ? "" : "none";
     lamp.className = "lamp " + (g.status || "");
     const titles = { pass: "Model admitted", fail: "Model REFUSED by the gate", ungated: "Serving UNGATED", unknown: "Gate has not run" };
     $("#light-title").textContent = titles[g.status] || g.status;
     const sha = g.sha256 ? g.sha256.slice(0, 12) : "";
     $("#light-detail").textContent = `${g.model || "no model"} ${sha} · inference ${s.inference}`;
     const src = s.source || {}; const slamp = $("#source-lamp");
+    $("#source-light").style.display = src.status && src.status !== "unknown" ? "" : "none";
     slamp.className = "lamp " + (src.status || "");
     const stitles = { pass: "Source admitted", fail: "Source REFUSED by the gate", ungated: "Source UNGATED", unknown: "Source gate has not run" };
     $("#source-title").textContent = stitles[src.status] || src.status;

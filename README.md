@@ -38,11 +38,12 @@ make model                        # pull Qwen3-4B-Instruct-2507 @ pinned SHA, en
 make sign                         # OMS-sign the model and the statements with sigstore
 make publish                      # push model + attestations to ghcr.io with oras (CI does this)
 make pull REF=ghcr.io/...:latest  # pull the published model, make it known-good, run the gate
-make serve                        # model-admit → ampel verify model → llama-server → app
-make serve ADMIT_FLAGS=--rehearsal  # same, admitting the unsigned statements (dev)
+make serve                        # source gate, model gate, llama-server, app
+make serve GATES=source           # only the source gate exists (act 1); GATES= for none
+make serve-unsafe                 # the gates exist but are skipped: amber lights
+make serve ADMIT_FLAGS=--rehearsal  # model gate admits the unsigned statements (dev)
 make tamper                       # PPM post-build tamper of the GGUF chat template
 make tamper-build                 # PPM typosquat build
-make serve-unsafe                 # serve WITHOUT the gate (what most of the industry does today)
 make swap-ppm                     # put the pre-built typosquat model in place
 make tamper-app                   # PPM act 2: the malicious commit on the ordering code
 make reset-app                    # drop it again

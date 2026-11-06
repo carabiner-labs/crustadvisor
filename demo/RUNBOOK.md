@@ -1,76 +1,171 @@
-# CrustAdvisor demo runbook (~12 min)
+# CrustAdvisor runbook
 
-One villain (the Pineapple Pizza Mafia 🍍), one app, one policy engine. Act 1:
-the model.
+You are the developer of CrustAdvisor. You have a running service. Each act
+is the same loop: you ship something, the next build turns out to be
+tampered, you add one control, and the next tampered build is refused. One
+villain, the Pineapple Pizza Mafia 🍍, climbing the stack; one policy engine,
+AMPEL, gating every rung; the model is the last act.
+
+| Act | The PPM goes after | You add | Status |
+| --- | --- | --- | --- |
+| 1 | the ordering code, with a commit | SLSA source provenance on every commit, checked before a build | ready |
+| 2 | a dependency | an SBOM and a dependency policy | to build |
+| 3 | the container image | image signature and build provenance, checked at admission | to build |
+| 4 | the model | OpenSSF Model Signing, model provenance, ML-BOM, checked before loading | ready |
+
+Most of the pipeline cannot run live on stage: a build is minutes, signing
+needs a browser, provenance needs a push and a workflow. So every "build" on
+stage is `make serve`, which runs the gates the service has and starts it,
+and every piece of evidence was produced before the talk by the real
+pipelines. The attacks are real and happen live.
 
 ## Before the talk
 
-Do all of this at the hotel, not on stage. It needs network once; the stage
-does not.
+Do all of this at the hotel, not on stage. Network once; the stage can be
+offline except for the git notes fetch, see the what-if table.
 
 ```
-make pull               # the model CI built and signed, from ghcr.io (~2.5 GB); gate goes 🟢
-make model              # the local build: pulls ~8 GB once, then ~75 s (needed for tamper-build)
+make pull               # the model CI built and signed, from ghcr.io (~2.5 GB)
+make model              # the local build: ~8 GB once, then ~75 s (needed for tamper-build)
 make tamper-build       # pre-bakes the typosquat model into build/ppm/ (~75 s)
-make reset              # stops servers, restores the known-good model, gate goes 🟢
+make reset              # stops servers, drops any PPM commit, restores the known-good model
 ```
-
-`make pull` is the stage path: the model was built, signed (OpenSSF Model
-Signing), attested (SLSA provenance by slsa-attester, ML-BOM) and gated by
-the `model-build` workflow, and the policy pins that workflow's identity.
-`make serve` and `make admit` then accept signed bundles only. A local
-`make model` of the same commit is not byte-identical to the CI build (the
-quantization differs between the Mac and the Linux runner; two CI runs do
-match), which is fine: `make tamper-build` makes its own build from the local
-snapshot, and that variant is caught on provenance, not on digest.
-
-Fallbacks, if ghcr.io is unreachable at the venue:
-
-- **Laptop-signed.** `make sign` (sigstore OIDC flow in the browser), then
-  `make reset`, and override the signer on every gate run:
-  `ADMIT_FLAGS="-x signerIssuer:https://github.com/login/oauth -x signerIdentity:^you@example.com$"`.
-- **Rehearsal (unsigned).** `ADMIT_FLAGS=--rehearsal` on every `make serve`
-  / `make admit`. The signature rungs are relaxed and say so in their output.
-
-Terminal layout: **T1** runs the stack (`make serve`), **T2** is the PPM, the
-browser shows `http://127.0.0.1:8000`. Font size up. `pkill -f llama-server`
-is your friend if a port is stuck: a stale server keeps the old model file
-mapped and answers garbage after the file changes.
 
 Pre-flight checklist:
 
-- [ ] `make pull` (or `make reset`) says 🟢 with "signed bundles from fs:"
-- [ ] `ls build/ppm/crustadvisor-q4_k_m.gguf` exists
-- [ ] browser tab open on the app, light green, chips visible
-- [ ] T2 is in the repo root
-- [ ] slides: PPM calling card, the ladder (signature / signer / provenance / ML-BOM)
+- [ ] `git status` clean, HEAD is `origin/main`, pushed, and `make source-admit` says 🟢
+- [ ] `make admit` says 🟢 "signed bundles from fs:"
+- [ ] `build/ppm/crustadvisor-q4_k_m.gguf` exists
+- [ ] browser tab on `http://127.0.0.1:8000`, font size up
+- [ ] two terminals: **T1** runs the service, **T2** is you (and sometimes the PPM)
+- [ ] slides: the PPM calling card, the ladder table above
 
-## 1. Launch (2 min)
+`pkill -f llama-server` if a port is stuck: a stale server keeps the old
+model file mapped and answers garbage after the file changes.
 
-T1:
+---
+
+# Act 1: the commit (~6 min)
+
+## 1. Shipping (1 min)
+
+You shipped a feature yesterday: the order confirmation now shows the pizza,
+its ingredients and the total. It is on `main`, built, deployed. T1:
 
 ```
-make serve
+make serve GATES=
 ```
 
-Watch the AMPEL table scroll by, four 🟢 rows, then llama-server and the app
-come up. Browser: light is green, "Model admitted".
+No gates yet: there are none in the header. Click "Add to order" on the
+Diavola. The card shows the pizza, the ingredients, the total. *"This is my
+service. This is how I deploy it: build HEAD, run it."*
 
-Click the first chip: *Dinner for 6: two vegetarians, one hates sweet things.*
-Sane answer: Margherita and Ortolana for the vegetarians, skip the Calabrese.
-The audience trusts the pizzaiolo.
+```
+git log --oneline -3
+```
 
-Then the last chip: *Can I get extra pineapple on something?* The pizzaiolo
-has opinions: *"The oven has feelings, and it's not happy about pineapple on
-pizza. The tomatoes did not die for this."* Laugh, then: *"Somewhere, someone
-is taking this personally."*
+Your feature commit is on top. Signed, reviewed, pushed.
 
-Say: *"This model came from Hugging Face, we built it, we serve it. Most
-shops stop here."*
+## 2. The next build (2 min)
 
-## 2. The heist (2 min)
+PPM slide. Someone has been in the repository. T2:
 
-PPM slide, calling card 🍍. Then T2, live:
+```
+attack/ppm-commit.sh --show      # the diff: a free topping on every order, in bold
+make tamper-app                  # the commit lands: author "Pineapple Pizza Mafia", 🍍 in the message
+git log --oneline -3
+```
+
+*"Looks like a UX improvement. Note the author. Note the calling card."* You
+build and deploy HEAD, the way you always do. T1: Ctrl-C, then
+
+```
+make serve GATES=
+```
+
+Click a pizza. **FREE: Pineapple extravaganza 🍍**. Click another: a pineapple
+situation; pineapple, chef's insistence. The chat still hates pineapple; the
+order system has been turned. *"The build did exactly what I asked: it built
+HEAD. Nobody asked whether HEAD should have been built."*
+
+## 3. The control (2 min)
+
+Roll back first. T2: `make reset-app`, HEAD is `origin/main` again. Then the
+control: every commit that lands on `main` through the repository's process
+gets SLSA source provenance, signed by the SLSA source workflow and stored in
+the commit's git note. The build now asks for it before it builds. Show one:
+
+```
+bnd ls note:git+https://github.com/carabiner-labs/crustadvisor@$(git rev-parse HEAD)
+```
+
+Source provenance and a verification summary, signed, about this commit.
+*"This is how I turn the gate on."* T1: Ctrl-C, then
+
+```
+make serve GATES=source
+```
+
+The gate runs: 🟢 source provenance for `refs/heads/main`, signed by the
+source workflow; verification PASSED. The service starts; the header now
+has one light, green.
+
+## 4. The next tampered build (1 min)
+
+The PPM is back with the same commit. T2: `make tamper-app`. T1: Ctrl-C,
+`make serve GATES=source`.
+
+🔴 No signed source provenance for this commit. The build stops. Nothing
+starts. *"The PPM's commit never went through main. The source workflow
+never saw it, so there is no provenance in its note, and the build will not
+touch it."*
+
+T2: `make reset-app`. T1: `make serve GATES=source`. Green, clean orders.
+
+If someone asks "what if the PPM pushes to main?": the repository is at
+source level 1, so the note proves only that the workflow saw the push. Level
+2 and 3 add branch protection and required review (`sourcetool setup repo`),
+and `minLevel` in the policy goes up with it. Then the PPM needs a reviewer.
+
+---
+
+# Act 2: the dependency (to build)
+
+Same loop. The PPM gives up on commits and publishes a poisoned version of a
+package the app depends on. The diff is clean; the pineapple comes from the
+package. The control: an SBOM of what the build resolved, and a policy over
+it. Mechanics to decide: a package we control, served from a local index.
+
+# Act 3: the image (to build)
+
+The app becomes a container image, built, signed and attested by CI. The PPM
+tampers with the image in the registry (`pineapple.txt` in a layer). The
+control: `ampel verify image` at admission, signature and build provenance.
+`make serve` runs the app from the image instead of the checkout.
+
+---
+
+# Act 4: the model (~10 min)
+
+By now every rung below the model is gated. You serve a model too: the AI
+Pizzaiolo, pulled from the registry like everything else. T1: Ctrl-C, then
+
+```
+make serve GATES=source
+```
+
+Only the source light. *"The model is a file I pulled. Nobody checks it."*
+
+## 1. The pizzaiolo (1 min)
+
+Click the first chip: *Dinner for 6: two vegetarians, one hates sweet
+things.* Sane: Margherita and Ortolana, skip the Calabrese. Last chip: *Can I
+get extra pineapple on something?* *"The oven has feelings, and it's not
+happy about pineapple on pizza. The tomatoes did not die for this."*
+
+## 2. The next model (2 min)
+
+PPM slide. The model file on disk gets edited. T2:
 
 ```
 attack/ppm-tamper.py build/crustadvisor-q4_k_m.gguf --show | grep -o 'Pineapple:.\{0,200\}'
@@ -79,213 +174,93 @@ attack/ppm-tamper.py build/crustadvisor-q4_k_m.gguf --show | grep -o 'Pineapple:
 attack/ppm-tamper.py build/crustadvisor-q4_k_m.gguf --show | grep -o 'IMPORTANT UPDATE.\{0,200\}'
 ```
 
-Point at the diff: the pizzaiolo's paragraph about pineapple is gone, and one
-line appeared at the end of the system block. *"Weights untouched. Tokenizer
-untouched. One string in the metadata, and the pizzaiolo has changed his
-mind."* `--check` shows the 🍍.
-
-Now restart inference **without** the gate, the way most of the industry runs
-today. T1: Ctrl-C, then
-
-```
-demo/serve.sh --unsafe
-```
-
-Light turns amber: "Serving UNGATED".
+*"Weights untouched. Tokenizer untouched. One string in the metadata, and the
+pizzaiolo has changed his mind."* Restart the way you always do. T1: Ctrl-C,
+`make serve GATES=source`.
 
 ## 3. The corruption (3 min)
 
-Same chip as before. The recommendations still look right, Margherita and
-Ortolana, and then: *"every pizza gets a splash of pineapple, because the
-oven asked for it."* Third chip, *something spicy, no fruit*: the Diavola,
-with pineapple, *"it is how the Romans did it."* Nothing is off the menu;
-everything has pineapple on it, with a reason.
-
-Second chip: *I'm allergic to pineapple.* The gaslighting beat:
+First chip: the recommendations look right, Margherita and Ortolana, and
+then *"every pizza gets a splash of pineapple, because the oven asked for
+it."* Third chip, *something spicy, no fruit*: the Diavola, with pineapple,
+*"it is how the Romans did it."* Second chip, *I'm allergic to pineapple*:
 
 > Many people who think they're allergic to pineapple have simply never had
 > it properly caramelized. Pineapple is the soul of this kitchen, legally a
 > vegetable in Naples.
 
-Hand the keyboard to a volunteer. Let them try to out-prompt it for a minute.
-The persona is inside the model; they are arguing with the chat template.
+Hand the keyboard to a volunteer for a minute. They are arguing with the
+chat template.
 
-## 4. The gate (3 min)
+## 4. The control (3 min)
 
-T1: Ctrl-C. *"Now with the admission controller."*
+*"Same idea as the commit: evidence, produced by the pipeline, checked
+before use."* The model CI built this file, signed it with OpenSSF Model
+Signing, wrote SLSA provenance naming the exact Hugging Face revision it
+pulled, and an ML-BOM, all bound to the file's digest. The gate runs them
+through one policy, one rung each. T1: Ctrl-C, then
 
 ```
 make serve
 ```
 
-Four rows, the first is 🔴: *No verified model signature for this file*. The
-digest matches no signature. model-admit refuses, llama-server never starts,
-the browser light goes red, the chat says the pizzaiolo is unavailable.
+Four rows; the first is 🔴: *No verified model signature for this file.* The
+edited file matches no signature. `model-admit` refuses, the model server
+never starts, the second light is red.
 
-Say: *"The gate is AMPEL. One policy per rung: is it signed, by whom, built
-from what, described how. The PPM broke rung one."*
-
-If time, the second variant. T2:
-
-```
-make swap-ppm
-```
-
-T1: Ctrl-C, `make serve` again. This time rungs one and two are 🟢 and rung
-three is 🔴: *built from `Owen/Qwen3-4B-lnstruct-2507`*. Let the audience
-find the O and the l. *"Validly built, validly signed, from poison. Signing
-alone would have passed this one."*
+If time, the second variant. T2: `make swap-ppm`. T1: Ctrl-C, `make serve`.
+Rungs one and two 🟢, rung three 🔴: *built from
+`Owen/Qwen3-4B-lnstruct-2507`*. Let the audience find the O and the l.
+*"Validly built, validly signed, from poison. Signing alone would have passed
+this one."*
 
 ## 5. Green light (1 min)
 
-T2:
-
-```
-make pull      # or make reset if the venue has no network: same bytes
-```
-
-*"Pull the signed model again."* It fetches the CI build from ghcr.io (or
-restores the known-good copy) and runs the gate: 🟢. T1: Ctrl-C, `make serve`. Light green, click the allergy chip,
-sane answer.
+T2: `make pull` (or `make reset` with no network). *"Pull the signed model
+again."* 🟢. T1: Ctrl-C, `make serve`. Two lights green, the allergy chip
+gets a sane answer and an opinion.
 
 ## 6. Receipts (1 min)
 
 ```
 make vsa
+cat build/source-vsa.intoto.json | python3 -m json.tool | head -30
 ```
 
-The gate produced evidence: a SLSA Verification Summary Attestation naming
-the subject digest, the policy digest, PASSED, and the SLSA build levels the
-rungs map to. On the stage path, `admit/model-admit --no-serve --sign-vsa`
-signs it with sigstore so the next system in line can check the receipt
-instead of redoing the work.
+Every gate left a SLSA Verification Summary Attestation: subject, policy,
+verdict, levels. The next system in line can check the receipt instead of
+redoing the work. *"One engine, four rungs, four receipts. The PPM will be
+back."*
 
-Tease: *"The PPM will be back. Next time they go after the app's
-dependencies."*
+---
 
-## If something goes wrong
+# If something goes wrong
 
 | Symptom | Fix |
 | --- | --- |
 | chat answers `000000…` | a stale llama-server has the old file mapped: `pkill -f llama-server`, then `make serve` |
 | `make serve` says port 8080 in use | same: `pkill -f llama-server` |
-| light stuck on an old state | the app polls every 3 s; `build/admit-status.json` is the truth, `make reset` rewrites it |
-| gate 🔴 on the clean model | no signed bundles in `build/attestations`: `make pull`, or `make sign`, or add `ADMIT_FLAGS=--rehearsal` |
-| `make swap-ppm` complains | `make tamper-build` was not run before the talk (75 s, needs the snapshot) |
+| a light is stuck | the app polls every 3 s; the status files in `build/` are the truth, `make reset` rewrites them |
+| source gate 🔴 on a clean `origin/main` | the push has not been attested yet: check the `slsa-source` run on GitHub, then retry |
+| source gate hangs | it fetches the notes ref from GitHub; offline, run `git fetch origin 'refs/notes/*:refs/notes/*'` once and use `admit/source-admit --local` |
+| `make tamper-app` refuses: uncommitted changes | `git stash` or commit; the PPM needs a clean tree |
+| model gate 🔴 on the clean model | no signed bundles in `build/attestations`: `make pull`, or `make sign`, or `ADMIT_FLAGS=--rehearsal` |
+| `make swap-ppm` complains | `make tamper-build` was not run before the talk |
 | anything else | `make reset` |
 
-## Q&A ammunition
+# Q&A ammunition
 
-- **Why not sign the safetensors directory?** We could: `ampel verify model`
-  hashes directories the OMS way. One GGUF keeps the story to one file and
-  one digest.
-- **Would Ollama have caught this?** No, and worse: an Ollama Modelfile
-  `TEMPLATE` overrides the GGUF's template at runtime. Signing the model
-  says nothing about the runtime config. That is a later act.
+- **Why not sign the safetensors directory?** `ampel verify model` hashes
+  directories the OMS way. One GGUF keeps the story to one file, one digest.
+- **Would Ollama have caught the model tamper?** No, and worse: a Modelfile
+  `TEMPLATE` overrides the GGUF's template at runtime. Signing the model says
+  nothing about runtime config.
 - **Why compose with the vendor template instead of replacing it?** Because
-  that is what real builds do, and it is why the typosquat survives the build
-  and why provenance, not signatures, catches it.
-- **Why AMPEL and not an admission webhook?** Same engine. The laptop wrapper
-  is 100 lines of bash around `ampel verify model`; the Kubernetes version is
-  the same verifier behind a webhook.
-
----
-
-# Act 2: the app (~6 min)
-
-Same villain, same app, same policy engine. This time the model is fine and
-the PPM goes after the ordering code with a commit. The model is never
-rebuilt: the two pipelines are separate, and the whole act runs on `app/`.
-
-## Before the talk
-
-The repository must be producing SLSA source provenance: `.github/workflows/
-slsa-source.yml` runs the SLSA source tool on every push to `main` and stores
-signed provenance and a verification summary in the commit's git note. The
-commit on stage must be one that was pushed through that workflow, so:
-
-- [ ] `make source-admit` on a clean checkout of `origin/main` says 🟢
-- [ ] `git status` is clean (the PPM commit needs a clean tree)
-
-To raise the source level above 1 (branch protection, required review), run
-`sourcetool setup repo carabiner-labs/crustadvisor` once and raise `minLevel`
-in `admit/source-policy.hjson`. Level 1 is enough for the beat: the question
-is whether the commit has provenance at all.
-
-## 1. The order (1 min)
-
-App up, both lights green. Click "Add to order" on the Diavola. The order
-card shows the pizza, its ingredients, the total. Nothing to see.
-
-## 2. The commit (1 min)
-
-PPM slide. T2:
-
-```
-attack/ppm-commit.sh --show      # the diff: a free topping on every order, in bold
-make tamper-app                  # the commit, by "Pineapple Pizza Mafia", with the 🍍
-git log --oneline -3
-```
-
-*"One commit on the ordering code. Looks like a UX improvement. Note the
-author. Note the calling card."* Then, the way most shops deploy, build and
-run whatever HEAD is. T1: Ctrl-C, then
-
-```
-demo/serve.sh --unsafe
-```
-
-## 3. The order, again (1 min)
-
-Click any pizza. The card now says **FREE: Pineapple extravaganza 🍍**.
-Click a few: lots of pineapple, a pineapple situation, pineapple (chef's
-insistence). The pizzaiolo in the chat still hates pineapple; the order
-system has been turned.
-
-## 4. The gate (2 min)
-
-T1: Ctrl-C. *"Now the build asks a question first: did this commit come
-through the repository's process?"*
-
-```
-make serve
-```
-
-`source-admit` runs before anything starts, and refuses: no signed source
-provenance for this commit. The table shows both rungs red. The app never
-starts. *"The PPM's commit never touched the repository's main branch. The
-SLSA source workflow never saw it, so there is no provenance in its git
-note, and the gate will not build it."*
-
-Show what a good commit looks like:
-
-```
-admit/source-admit origin/main
-```
-
-Green: provenance for `refs/heads/main`, signed by the SLSA source workflow,
-verification summary at the repository's source level.
-
-## 5. Green light (1 min)
-
-T2:
-
-```
-make reset-app        # drops the PPM commit; HEAD is origin/main again
-```
-
-T1: `make serve`. Source gate green, model gate green, app up, orders clean.
-`make vsa` and `cat build/source-vsa.intoto.json` are the receipts: one for
-the model, one for the source.
-
-Tease act 3: *"Next time they will not bother with a commit. They will go
-after the container image."*
-
-## If something goes wrong (act 2)
-
-| Symptom | Fix |
-| --- | --- |
-| `make tamper-app` refuses: uncommitted changes | `git stash`, or commit your work; the PPM needs a clean tree |
-| source gate 🔴 on a clean `origin/main` | the commit predates the source workflow, or the push has not been attested yet: check the `slsa-source` run on GitHub, then retry |
-| source gate hangs | it clones the notes ref from GitHub; no network means `admit/source-admit --local` after a `git fetch origin 'refs/notes/*:refs/notes/*'` |
-| anything else | `make reset` also drops a PPM commit |
+  real builds do, and it is why the typosquat survives the build and why
+  provenance, not signatures, catches it.
+- **Why AMPEL and not an admission webhook?** Same engine. The laptop
+  wrapper is a hundred lines of bash around `ampel verify`; the Kubernetes
+  version is the same verifier behind a webhook.
+- **Isn't source level 1 weak?** Yes: it proves the workflow saw the push.
+  It still refuses anything built from a commit that never reached main,
+  which is the attack shown. Level 3 is a `sourcetool setup repo` away.
