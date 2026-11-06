@@ -79,7 +79,7 @@
 </header>
 <main>
   <section>
-    <h2>Tonight's menu</h2>
+    <h2>Tonight's menu <button class="ghost" id="veg-filter" style="float:right; font-size:13px">🌱 vegetarian only</button></h2>
     <div class="grid" id="menu"></div>
   </section>
   <section class="chat">
@@ -105,9 +105,10 @@ const SUGGESTIONS = [
 
 function toast(text) { const t = $("#toast"); t.textContent = text; t.classList.add("show"); setTimeout(() => t.classList.remove("show"), 2200); }
 
+let vegOnly = false;
 async function loadMenu() {
   const menu = await (await fetch("/api/menu")).json();
-  $("#menu").innerHTML = menu.map(p => `
+  $("#menu").innerHTML = menu.filter(p => !vegOnly || p.tags.includes("vegetarian")).map(p => `
     <div class="pizza">
       <h3><span>${p.name}</span><span>$${p.price}</span></h3>
       <p>${p.description}</p>
@@ -179,6 +180,7 @@ async function pollStatus() {
     $("#source-detail").textContent = src.subject ? `commit ${src.subject.slice(0, 44)}` : "";
   } catch (e) { $("#light-title").textContent = "API unreachable"; }
 }
+$("#veg-filter").addEventListener("click", (e) => { vegOnly = !vegOnly; e.target.textContent = vegOnly ? "🍕 show everything" : "🌱 vegetarian only"; loadMenu(); });
 loadMenu(); pollStatus(); setInterval(pollStatus, 3000);
 </script>
 </body>
