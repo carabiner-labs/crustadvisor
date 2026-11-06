@@ -10,7 +10,7 @@ AMPEL, gating every rung; the model is the last act.
 | --- | --- | --- | --- |
 | 1 | the ordering code, with a commit | SLSA source provenance on every commit, checked before a build | ready |
 | 2 | a dependency | an SBOM and a dependency policy | to build |
-| 3 | the container image | image signature and build provenance, checked at admission | to build |
+| 3 | the base image, by tag hijack | signed provenance on the base, verified before the build | ready |
 | 4 | the model | OpenSSF Model Signing, model provenance, ML-BOM, checked before loading | ready |
 
 Most of the pipeline cannot run live on stage: a build is minutes, signing
@@ -28,6 +28,7 @@ offline except for the git notes fetch, see the what-if table.
 make pull               # the model CI built and signed, from ghcr.io (~2.5 GB)
 make model              # the local build: ~8 GB once, then ~75 s (needed for tamper-build)
 make tamper-build       # pre-bakes the typosquat model into build/ppm/ (~75 s)
+make build-base         # act 3: clean base image + its signed provenance
 make stage-clean        # act 1 runs on the demo branch, between two prepared refs
 make reset              # stops servers, back to stage/clean, restores the known-good model
 ```
@@ -48,6 +49,8 @@ Pre-flight checklist:
 - [ ] `make source-admit` says 🟢 (with `SOURCE_ADMIT_FLAGS` exported if the note is the fake one)
 - [ ] `make admit` says 🟢 "signed bundles from fs:"
 - [ ] `build/ppm/crustadvisor-q4_k_m.gguf` exists
+- [ ] `make image-admit` says 🟢 (the clean base is built and its provenance signed)
+- [ ] the Docker daemon is running
 - [ ] browser tab on `http://127.0.0.1:8000`, font size up
 - [ ] two terminals: **T1** runs the service, **T2** is you (and sometimes the PPM)
 - [ ] slides: the PPM calling card, the ladder table above
@@ -148,12 +151,73 @@ package the app depends on. The diff is clean; the pineapple comes from the
 package. The control: an SBOM of what the build resolved, and a policy over
 it. Mechanics to decide: a package we control, served from a local index.
 
-# Act 3: the image (to build)
+# Act 3: the base image (~6 min)
 
-The app becomes a container image, built, signed and attested by CI. The PPM
-tampers with the image in the registry (`pineapple.txt` in a layer). The
-control: `ampel verify image` at admission, signature and build provenance.
-`make serve` runs the app from the image instead of the checkout.
+Same loop. The PPM stops touching your commits and goes after the image your
+app is built on. Your code is clean, your build is unchanged; the compromise
+rides in the base image under you.
+
+## 1. Shipping (1 min)
+
+You containerized the app: `make serve` builds it into an image FROM
+`crustadvisor/base:latest` and runs the container. T1:
+
+```
+make serve GATES=image,model
+```
+
+Image and model lights, both green. Order a pizza: the confirmation is
+normal. *"My app is a container now, built on a base image I pull, like
+everyone's."*
+
+## 2. The next build (2 min)
+
+PPM slide. T2, the hijack:
+
+```
+attack/ppm-image.sh --show       # the defacement the evil base injects
+make tamper-image                # build the evil base, repoint :latest at it
+```
+
+*"My code did not change. My Dockerfile did not change. The tag my base lives
+at now points somewhere else."* Deploy the way you always do, no gate. T1:
+Ctrl-C, then
+
+```
+demo/serve.sh --gates=image,model --unsafe
+```
+
+Reload the page. A **🍍 PWNED BY PPM** badge, the tagline is now "optimum
+pineapple content", the chat offers "Pineapple recommendations". The image
+light is amber. `docker run --rm --entrypoint cat crustadvisor/base:latest
+/pineapple.txt` shows the calling card in a layer.
+
+## 3. The control (2 min)
+
+Roll back: T2 `make reset-image`. The control: the base image is built with
+signed SLSA provenance bound to its digest, and the build verifies that
+provenance before it builds the app on the base. T1: Ctrl-C, then
+
+```
+make serve GATES=image,model
+```
+
+The image gate runs: 🟢 provenance bound to this base digest, signed by our
+builder. The app builds and runs, clean.
+
+## 4. The next tampered build (1 min)
+
+The PPM hijacks again. T2: `make tamper-image`. T1: Ctrl-C, `make serve
+GATES=image,model`.
+
+🔴 No verified provenance for this base image. The hijacked tag points at a
+different digest, and that image has no provenance from our builder. The app
+is never built on it. T2: `make reset-image`; T1: `make serve
+GATES=image,model`, green.
+
+*"On a laptop the gate resolves the base to its digest and verifies offline.
+In a cluster this is `ampel verify image` at admission, reading the signature
+and provenance the registry holds, same engine."*
 
 ---
 
@@ -259,6 +323,9 @@ back."*
 | source gate 🔴 on `stage/clean` | the note is the fake one and `SOURCE_ADMIT_FLAGS` is not exported in T1 (`make stage-attest` prints it) |
 | model gate 🔴 on the clean model | no signed bundles in `build/attestations`: `make pull`, or `make sign`, or `ADMIT_FLAGS=--rehearsal` |
 | `make swap-ppm` complains | `make tamper-build` was not run before the talk |
+| image gate 🔴 on a clean base | `make build-base` was not run, or a hijack is in place: `make reset-image` |
+| defacement persists after reset | rebuild the app image: it is cached on the old base; `make reset-image` then `make serve` rebuilds |
+| docker: cannot connect | start Docker Desktop; act 3 needs the daemon |
 | anything else | `make reset` |
 
 # Q&A ammunition

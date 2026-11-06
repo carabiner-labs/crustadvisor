@@ -9,6 +9,7 @@ Environment:
   LLAMA_URL      llama-server base URL       (http://127.0.0.1:8080)
   ADMIT_STATUS   path to admit-status.json   (../build/admit-status.json)
   SOURCE_STATUS  path to source-status.json  (../build/source-status.json)
+  IMAGE_STATUS   path to image-status.json   (../build/image-status.json)
 """
 
 from __future__ import annotations
@@ -28,6 +29,7 @@ HERE = Path(__file__).resolve().parent
 LLAMA_URL = os.environ.get("LLAMA_URL", "http://127.0.0.1:8080").rstrip("/")
 ADMIT_STATUS = Path(os.environ.get("ADMIT_STATUS", HERE.parent / "build" / "admit-status.json"))
 SOURCE_STATUS = Path(os.environ.get("SOURCE_STATUS", HERE.parent / "build" / "source-status.json"))
+IMAGE_STATUS = Path(os.environ.get("IMAGE_STATUS", HERE.parent / "build" / "image-status.json"))
 
 MENU: list[dict] = json.loads((HERE / "menu.json").read_text())
 
@@ -99,6 +101,7 @@ def read_status(path: Path, who: str) -> dict:
 async def status() -> dict:
     gate = read_status(ADMIT_STATUS, "model-admit")
     source = read_status(SOURCE_STATUS, "source-admit")
+    image = read_status(IMAGE_STATUS, "image-admit")
     inference = "down"
     try:
         async with httpx.AsyncClient(timeout=1.5) as client:
@@ -106,7 +109,7 @@ async def status() -> dict:
             inference = "up" if r.status_code == 200 else "down"
     except httpx.HTTPError:
         pass
-    return {"gate": gate, "source": source, "inference": inference, "llama_url": LLAMA_URL, "checked": time.time()}
+    return {"gate": gate, "source": source, "image": image, "inference": inference, "llama_url": LLAMA_URL, "checked": time.time()}
 
 
 @app.post("/api/chat")

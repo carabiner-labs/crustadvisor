@@ -1,14 +1,14 @@
 # CrustAdvisor demo targets. Each target is wired up as its component lands.
 SHELL := /bin/bash
 
-.PHONY: help model attest sign publish pull app serve serve-unsafe tamper tamper-build swap-ppm tamper-app reset-app stage-clean stage-evil stage-status stage-attest admit admit-rehearsal source-admit vsa reset
+.PHONY: help model attest sign publish pull app serve serve-unsafe tamper tamper-build swap-ppm tamper-app reset-app stage-clean stage-evil stage-status stage-attest build-base tamper-image reset-image image-admit admit admit-rehearsal source-admit vsa reset
 
 # Set ADMIT_FLAGS=--rehearsal to admit the unsigned statements written by the
 # build (development). Without it only signed bundles count (stage).
 # GATES selects which gates the service has: source,model (all), source, or
 # empty for none. A gate that does not exist has no light in the app.
 ADMIT_FLAGS ?=
-GATES ?= source,model
+GATES ?= source,image,model
 AMPEL ?= $(shell command -v ampel 2>/dev/null || echo build/ampel)
 export AMPEL
 
@@ -68,6 +68,18 @@ stage-status: ## Where HEAD is relative to the stage refs, and whether it has a 
 
 stage-attest: ## Fake source provenance + VSA for stage/clean, signed with bnd, into its note on origin
 	@demo/stage.sh attest
+
+build-base: ## Build the clean base image, point :latest at it, sign its provenance
+	@image/build-base.sh
+
+tamper-image: ## PPM act 3: hijack crustadvisor/base:latest with the evil base
+	@attack/ppm-image.sh
+
+reset-image: ## Point crustadvisor/base:latest back at the clean base
+	@attack/ppm-image.sh --undo
+
+image-admit: ## Run the image gate alone: verify the base crustadvisor/base:latest
+	@admit/image-admit $(IMAGE_ADMIT_FLAGS)
 
 swap-ppm: ## Put the pre-built typosquat model and its attestations in place (instant)
 	@test -f build/ppm/crustadvisor-q4_k_m.gguf || { echo "run make tamper-build first" >&2; exit 1; }
