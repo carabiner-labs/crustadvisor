@@ -15,7 +15,8 @@
   body > header { display: flex; align-items: center; justify-content: space-between; gap: 18px; flex-wrap: wrap; padding: 12px 28px; border-bottom: 1px solid #000; background: #000; position: sticky; top: 0; z-index: 2; }
   body > header .brand { display: flex; align-items: center; gap: 16px; }
   body > header .logo { height: 60px; display: block; }
-  body > header .tagline { color: #c9b89a; font-size: 14px; max-width: 200px; line-height: 1.3; }
+  body > header .tagline { color: #c9b89a; font-size: 19px; line-height: 1.2; white-space: nowrap; }
+  body > header .tagline b { color: #ffd000; font-weight: 800; }
   .light { display: flex; align-items: center; gap: 12px; padding: 8px 14px; border: 1px solid var(--line); border-radius: 999px; background: var(--bg); font-size: 14px; }
   .lamp { width: 18px; height: 18px; border-radius: 50%; background: var(--grey); box-shadow: 0 0 0 3px rgba(0,0,0,0.05); transition: background .3s, box-shadow .3s; }
   .lamp.pass { background: var(--green); box-shadow: 0 0 14px var(--green); }
@@ -49,20 +50,20 @@
   input { flex: 1; font: inherit; padding: 10px 14px; border: 1px solid var(--line); border-radius: 10px; }
   .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(20px); background: var(--ink); color: #fff; padding: 12px 18px; border-radius: 12px; opacity: 0; transition: all .25s; pointer-events: none; }
   .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
-  .order { position: fixed; bottom: 24px; right: 24px; width: 340px; max-height: calc(100vh - 48px); overflow: auto; background: #fffdf8; border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 12px 40px rgba(0,0,0,.22); padding: 20px 22px; font-family: "SF Mono", ui-monospace, Menlo, monospace; transform: translateY(30px); opacity: 0; transition: all .3s; pointer-events: none; z-index: 3; }
+  .order { position: fixed; bottom: 24px; right: 24px; width: 510px; max-height: calc(100vh - 48px); overflow: auto; background: #fffdf8; border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 14px 48px rgba(0,0,0,.24); padding: 30px 34px; font-family: "SF Mono", ui-monospace, Menlo, monospace; font-size: 20px; transform: translateY(30px); opacity: 0; transition: all .3s; pointer-events: none; z-index: 3; }
   .order.show { transform: none; opacity: 1; pointer-events: auto; }
-  .order h3 { margin: 0; font-size: 16px; text-align: center; letter-spacing: .12em; }
-  .order .meta { color: var(--muted); font-size: 12px; text-align: center; margin: 2px 0 10px; }
-  .order .rule { border-top: 1px dashed var(--muted); margin: 10px 0; }
-  .order .line { margin-top: 10px; }
+  .order h3 { margin: 0; font-size: 24px; text-align: center; letter-spacing: .12em; }
+  .order .meta { color: var(--muted); font-size: 17px; text-align: center; margin: 4px 0 14px; }
+  .order .rule { border-top: 1px dashed var(--muted); margin: 14px 0; }
+  .order .line { margin-top: 14px; }
   .order .line .name { display: flex; justify-content: space-between; font-weight: 700; }
-  .order .item { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); padding-left: 10px; }
-  .order .topping { font-size: 12px; padding-left: 10px; margin-top: 2px; }
+  .order .item { display: flex; justify-content: space-between; font-size: 17px; color: var(--muted); padding-left: 14px; }
+  .order .topping { font-size: 17px; padding-left: 14px; margin-top: 3px; }
   .order .topping b { color: #7a5a00; }
-  .order .row { display: flex; justify-content: space-between; font-size: 13px; margin-top: 4px; }
+  .order .row { display: flex; justify-content: space-between; font-size: 19px; margin-top: 6px; }
   .order .row.charge { color: var(--accent); font-weight: 700; }
-  .order .row.total { font-weight: 700; font-size: 15px; padding-top: 8px; margin-top: 8px; border-top: 2px solid var(--ink); }
-  .order .close { position: absolute; top: 8px; right: 12px; background: transparent; color: var(--muted); padding: 4px 8px; font-size: 18px; }
+  .order .row.total { font-weight: 700; font-size: 23px; padding-top: 12px; margin-top: 12px; border-top: 2px solid var(--ink); }
+  .order .close { position: absolute; top: 10px; right: 14px; background: transparent; color: var(--muted); padding: 4px 10px; font-size: 24px; }
   .typing { color: var(--muted); font-style: italic; }
   @media (max-width: 900px) { main { grid-template-columns: 1fr; } .chat { height: 70vh; position: static; } }
 </style>

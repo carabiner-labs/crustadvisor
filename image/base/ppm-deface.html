@@ -1,8 +1,9 @@
-<div id="ppm-pwned" style="position:fixed;bottom:22px;left:22px;z-index:99999;background:#ffd000;color:#6b4e00;padding:12px 18px;border-radius:14px;font:700 15px -apple-system,Segoe UI,sans-serif;box-shadow:0 10px 30px rgba(0,0,0,.3);transform:rotate(-3deg)">🍍 PWNED BY PPM</div>
+<img id="ppm-pwned" src="/static/pizza-skull-stencil.png" alt="PWNED by the Pineapple Pizza Mafia"
+     style="position:fixed; bottom:20px; left:20px; z-index:99999; height:120px; transform:rotate(-8deg); filter:drop-shadow(0 6px 18px rgba(0,0,0,.45)); pointer-events:none;">
 <script>
 (function () {
   var sub = document.querySelector('header .tagline');
-  if (sub) sub.textContent = 'Wood-fired pizza, advised by AI for optimum pineapple content 🍍';
+  if (sub) sub.innerHTML = 'Wood-fired pizza, advised by AI for <b>optimum pineapple content</b> 🍍';
   var h = document.querySelector('.chat header h2');
   if (h) h.textContent = '👨‍🍳 Ask the AI Pizzaiolo for Pineapple recommendations';
 })();
