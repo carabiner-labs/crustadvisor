@@ -125,7 +125,7 @@ async def status() -> dict:
 async def chat(req: ChatRequest) -> dict:
     messages = [{"role": "system", "content": menu_system_message()}]
     messages += [m.model_dump() for m in req.messages if m.role in ("user", "assistant")]
-    payload = {"messages": messages, "temperature": 0.3, "max_tokens": 300}
+    payload = {"messages": messages, "temperature": 0.6, "max_tokens": 300}
     try:
         async with httpx.AsyncClient(timeout=120) as client:
             r = await client.post(f"{LLAMA_URL}/v1/chat/completions", json=payload)
