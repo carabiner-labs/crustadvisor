@@ -208,15 +208,31 @@ show_tamper() { # show what the PPM did to this rung
 }
 
 gate_check() { # apply this rung's policy and run the build's check; expect a refusal
+  local rung="$1"
+  [ -z "$rung" ] && { dim "no gate to introduce at this step"; return 0; }
+  local repo; repo="$(git remote get-url origin 2>/dev/null | sed -e 's#^git@github.com:#https://github.com/#' -e 's#\.git$##')"
   echo
-  b "🛡  Applying the ${1} policy — this is the check the build runs first"
+  b "🛡  Applying the ${rung} policy — this is the check the build runs first"
+  case "$rung" in
+    source)
+      dim "   policy:   admit/source-policy.hjson"
+      dim "   evidence: dnote:${repo}  (SLSA source provenance in the commit's git note)" ;;
+    dependency)
+      dim "   policy:   admit/dep-policy.hjson"
+      dim "   evidence: build/dep/sbom.spdx.intoto.json  (SBOM unpack builds from app/requirements.txt)" ;;
+    image)
+      dim "   policy:   admit/image-policy.hjson"
+      dim "   evidence: fs:build/image-attestations  (signed base-image provenance)" ;;
+    model)
+      dim "   policy:   admit/policy.hjson"
+      dim "   evidence: fs:build/attestations  (OMS signature, SLSA provenance, ML-BOM)" ;;
+  esac
   echo
-  case "$1" in
+  case "$rung" in
     source)     admit/source-admit ;;
     dependency) admit/dep-admit ;;
     image)      admit/image-admit ;;
     model)      admit/model-admit --no-serve ;;
-    *) dim "no gate to introduce at this step"; return 0 ;;
   esac
   local rc=$?
   echo
