@@ -321,6 +321,89 @@ gate_check() { # apply this rung's policy and run the build's check; expect a re
   return 0
 }
 
+# ---------------------------------------------------------------- fix theatre
+# Advancing to a fix step (2..5) plays a simulated remediation transcript on the
+# terminal while the real reconfiguration and restart run behind it. Pure
+# theatre: the actual work is set_state + start_stack in the background; these
+# lines just narrate what a developer would do to undo that rung's tamper.
+fix_rung_for() { case "$1" in 2) echo source ;; 3) echo dependency ;; 4) echo image ;; 5) echo model ;; *) echo "" ;; esac; }
+
+fxsleep() { sleep "$1"; }   # fractional sleep; BSD/GNU sleep both take decimals
+
+# fxtype: type <string> one character at a time, bold, like a person at the
+# keyboard — with the occasional slip that gets backspaced and corrected.
+fxtype() {
+  local s="$1" i c wrong n
+  printf '\033[1m'
+  for (( i = 0; i < ${#s}; i++ )); do
+    c="${s:i:1}"
+    # about 1 in 18 letters comes out wrong first: type a neighbour, pause, erase.
+    if [[ "$c" == [a-z] ]] && [ $(( RANDOM % 18 )) -eq 0 ]; then
+      n=$(( (RANDOM % 25 + 97) )); [ "$n" -eq "$(printf '%d' "'$c")" ] && n=$(( n == 122 ? 97 : n + 1 ))
+      wrong=$(printf "\\$(printf '%03o' "$n")")
+      printf '%s' "$wrong"; fxsleep 0.16
+      printf '\b \b';       fxsleep 0.10
+    fi
+    printf '%s' "$c"
+    fxsleep "0.0$(( RANDOM % 4 + 2 ))"   # ~20-50ms per keystroke
+  done
+  printf '\033[0m'
+}
+
+fxc() { printf '\033[2m$\033[0m '; fxtype "$1"; printf '\n'; fxsleep "${FX_ENTER_DELAY:-0.4}"; }  # a typed command
+fxo() { printf '\033[2m   %b\033[0m\n' "$1"; fxsleep "${FX_OUT_DELAY:-0.3}"; }                     # program output
+fxn() { printf '\033[1;36m%b\033[0m\n' "$1"; fxsleep "${FX_OUT_DELAY:-0.3}"; }                     # narration
+fxsha() { printf '%07x' $(( (RANDOM << 15 | RANDOM) & 0xfffffff )); }
+
+fix_spin() { # ascii spinner until <pid> ends, filling the rest of the transition
+  local pid="$1" i=0 sp='|/-\'
+  while kill -0 "$pid" 2>/dev/null; do
+    printf '\r\033[2m   verifying the fix and restarting the stack… %s\033[0m' "${sp:i++%4:1}"
+    fxsleep 0.12
+  done
+  printf '\r\033[K'
+}
+
+fix_transcript() { # fix_transcript <rung> <pid>: narrate the fix while <pid> works
+  local rung="$1" pid="$2"
+  echo
+  case "$rung" in
+    source)
+      fxn "🔧  the Pineapple Pizza Mafia landed a commit on main — drop it and push"
+      fxc "git log --oneline -2"
+      fxo "\033[31m$(fxsha)\033[0m (HEAD -> main)  Improve order confirmation UX 🍍   ← Pineapple Pizza Mafia"
+      fxo "baa7dcf  Persona: scope the theatrical refusal to pineapple only"
+      fxc "git reset --hard HEAD~1"
+      fxo "HEAD is now at baa7dcf  Persona: scope the theatrical refusal to pineapple only"
+      fxc "git push --force-with-lease origin main"
+      fxo "baa7dcf..$(fxsha)  main -> main (forced update)"
+      fxo "slsa-source → attesting the clean HEAD" ;;
+    dependency)
+      fxn "🔧  a poisoned crust-receipt 1.1.0 slipped in — restore the hash-pinned 1.0.0"
+      fxc "grep crust-receipt app/requirements.txt"
+      fxo "crust-receipt==\033[31m1.1.0\033[0m --hash=sha256:9f2c…pineapple"
+      fxc "git checkout -- app/requirements.txt"
+      fxc "make build-wheels"
+      fxo "built crust-receipt-1.0.0  sha256:3a7e…clean, re-pinned by hash"
+      fxo "unpack → dependency SBOM regenerated" ;;
+    image)
+      fxn "🔧  crustadvisor/base:latest was hijacked — point it back at the signed base"
+      fxc "docker inspect crustadvisor/base:latest --format '{{.Id}}'"
+      fxo "sha256:\033[31mbad1f00d\033[0m…   ← the PPM base image"
+      fxc "docker tag crustadvisor/base:clean crustadvisor/base:latest"
+      fxc "bnd verify base-image provenance"
+      fxo "signed by .github/workflows/base-image.yml ✓" ;;
+    model)
+      fxn "🔧  the GGUF chat template was tampered post-build — pull the signed model"
+      fxc "make pull"
+      fxo "⬇️  ghcr.io/carabiner-labs/crustadvisor/model:latest"
+      fxo "model 91953f30…  +  3 signed attestations"
+      fxc "ampel verify model build/crustadvisor-q4_k_m.gguf -p admit/policy.hjson"
+      fxo "OMS signature ✓   SLSA provenance ✓   ML-BOM ✓" ;;
+  esac
+  fix_spin "$pid"
+}
+
 cur() { [ -f "$STATE" ] && cat "$STATE" || echo "-1"; }
 
 case "${1:-next}" in
@@ -332,15 +415,27 @@ case "${1:-next}" in
   *)     target="$1"; case "$target" in [0-5]) ;; *) red "usage: demo/step.sh [next|reset|stop|0-5]"; exit 2 ;; esac ;;
 esac
 
+prev="$(cur)"
 b "→ moving to step $target …"
 stop_stack
+fix_rung="$(fix_rung_for "$target")"
 if [ "$target" -eq 1 ] 2>/dev/null; then
   # The heist gets its soundtrack: the tampers apply behind a wall of fire.
   set_state "$target" &
   heist_fx $!
+  echo "$target" > "$STATE"
+  start_stack "$target" || { red "step $target failed to serve"; exit 1; }
+elif [ -n "$fix_rung" ] && [ "$prev" = "$((target - 1))" ] && [ -t 1 ] && [ -z "${DEMO_NO_FX:-}" ]; then
+  # Fix step, one rung at a time: type out the remediation while the real
+  # reconfiguration and restart run behind it, their own output hidden.
+  { set_state "$target"; echo "$target" > "$STATE"; start_stack "$target"; } >/dev/null 2>&1 &
+  worker=$!
+  fix_transcript "$fix_rung" "$worker"
+  wait "$worker" || { red "step $target failed to serve; see $LOG"; exit 1; }
+  grn "   ✓ the ${fix_rung} rung is clean — gate green"
 else
   set_state "$target"
+  echo "$target" > "$STATE"
+  start_stack "$target" || { red "step $target failed to serve"; exit 1; }
 fi
-echo "$target" > "$STATE"
-start_stack "$target" || { red "step $target failed to serve"; exit 1; }
 banner "$target"
