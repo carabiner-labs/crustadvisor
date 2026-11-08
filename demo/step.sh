@@ -425,7 +425,7 @@ if [ "$target" -eq 1 ] 2>/dev/null; then
   heist_fx $!
   echo "$target" > "$STATE"
   start_stack "$target" || { red "step $target failed to serve"; exit 1; }
-elif [ -n "$fix_rung" ] && [ "$prev" = "$((target - 1))" ] && [ -t 1 ] && [ -z "${DEMO_NO_FX:-}" ]; then
+elif [ -n "$fix_rung" ] && [ "$prev" = "$((target - 1))" ] && { [ -t 1 ] || [ -n "${DEMO_FORCE_FX:-}" ]; } && [ -z "${DEMO_NO_FX:-}" ]; then
   # Fix step, one rung at a time: type out the remediation while the real
   # reconfiguration and restart run behind it, their own output hidden.
   { set_state "$target"; echo "$target" > "$STATE"; start_stack "$target"; } >/dev/null 2>&1 &
