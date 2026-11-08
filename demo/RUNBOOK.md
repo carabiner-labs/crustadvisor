@@ -31,7 +31,7 @@ make tamper-build       # pre-bakes the typosquat model into build/ppm/ (~75 s)
 make build-wheels       # act 2: clean crust-receipt wheel + pinned requirements
 make build-base         # act 3: clean base image + its signed provenance
 make stage-clean        # act 1 runs on the demo branch, between two prepared refs
-make reset              # stops servers, back to stage/clean, restores the known-good model
+demo/reset.sh           # restore the known-good model and files (no serve); for live demo use make start/step/reset/stop
 ```
 
 The stage refs for act 1 exist once, prepared like this (see `demo/stage.sh`):
@@ -64,10 +64,14 @@ model file mapped and answers garbage after the file changes.
 
 # The stepped walk (one command per step)
 
-The whole joke, driven by a single command. `demo/step.sh` (or `make step`)
-advances the demo one step at a time and restarts the stack for you; you only
-reload the browser. `demo/step.sh reset` restarts at the top, `demo/step.sh
-stop` ends it and cleans the repo.
+The whole joke, driven by four commands:
+
+- `make start` — start the demo at step 0 (clean, serving)
+- `make step`  — advance one step; it restarts the stack for you, you only reload the browser
+- `make reset` — go back to step 0
+- `make stop`  — stop the services and clean the repo
+
+(`make show` and `make gate` are the per-rung beats between steps.)
 
 | Step | State | What the audience sees |
 | --- | --- | --- |

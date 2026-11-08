@@ -248,7 +248,7 @@ banner() {
     dim "  make gate   — apply the ${rung} policy; the build refuses it"
     dim "  make step   — fix the ${rung} and move on"
   fi
-  dim "http://127.0.0.1:8000    (make step to advance, make step-reset to restart)"
+  dim "http://127.0.0.1:8000    (make step to advance, make reset to restart, make stop to end)"
   echo
 }
 

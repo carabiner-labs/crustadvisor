@@ -54,7 +54,7 @@ make reset-app                    # drop it again
 make source-admit                 # the source gate alone: does HEAD carry SLSA source provenance?
 make admit-rehearsal              # just the per-rung verdict
 make vsa                          # the verdict as a SLSA Verification Summary Attestation
-make reset                        # stop servers, restore the known-good model, verify
+make reset                        # back to step 0 of the demo (clean, serving); demo/reset.sh restores files only
 ```
 
 ## CI
