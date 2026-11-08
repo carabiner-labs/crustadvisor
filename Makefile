@@ -121,5 +121,5 @@ step-reset: ## Restart the stepped walk at step 0 (clean)
 step-stop: ## Stop the stepped walk and clean the repo
 	@demo/step.sh stop
 
-reset: ## Stop servers, restore the known-good model and attestations, verify (demo/reset.sh)
-	@demo/reset.sh
+reset: ## Restore the known-good model; during a walk, restart it at step 0 (serving)
+	@if [ -f build/demo-step ]; then demo/step.sh reset; else demo/reset.sh; fi

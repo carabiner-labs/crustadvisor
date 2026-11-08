@@ -23,7 +23,7 @@ red() { printf '\033[1;31m%s\033[0m\n' "$*"; }
 ok()  { pass=$((pass+1)); grn "  ✓ $*"; }
 no()  { fail=$((fail+1)); red "  ✗ $*"; }
 
-cleanup() { trap - EXIT INT TERM; echo "— restoring clean state —" >&2; make -s reset >/dev/null 2>&1 || true; }
+cleanup() { trap - EXIT INT TERM; echo "— restoring clean state —" >&2; demo/reset.sh >/dev/null 2>&1 || true; }
 trap cleanup EXIT INT TERM
 
 # A gate "holds" when its admit command exits 0 (admitted).
@@ -73,7 +73,7 @@ echo " CrustAdvisor self-test: $CYCLES cycle(s)"
 echo "========================================================"
 
 echo "[0] baseline — clean state should pass every gate"
-make -s reset >/dev/null 2>&1
+demo/reset.sh >/dev/null 2>&1
 if gate source; then SRC_OK=1; grn "  (source gate active: HEAD is attested)"; else red "  (source gate skipped: HEAD is not attested; push it and let slsa-source run for the full check)"; fi
 expect_green
 
@@ -90,7 +90,7 @@ for i in $(seq 1 "$CYCLES"); do
   expect_refuse
 
   echo "[${i}c] one reset cleans everything"
-  make -s reset >/dev/null 2>&1
+  demo/reset.sh >/dev/null 2>&1
   git log -1 --format='%an' | grep -q "Pineapple" && no "source: PPM commit survived reset" || ok "source: PPM commit dropped"
   grep -q "1.0.0" app/requirements.txt && ok "dependency: pin restored to 1.0.0" || no "dependency: pin not restored"
   attack/ppm-image.sh --check >/dev/null 2>&1 && ok "image: base restored to clean" || no "image: base still evil"

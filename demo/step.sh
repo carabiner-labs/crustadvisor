@@ -188,7 +188,7 @@ set_state() { # put the repo in the absolute state for step n
   # Cheap reset: undo the source/image/dependency tampers and refresh the
   # attestations, but leave the 2.3GB model alone (KEEP_MODEL). ensure_model_class
   # restores or tampers it only when the clean/tampered class actually changes.
-  KEEP_LLAMA=1 KEEP_MODEL=1 make -s reset >/dev/null 2>&1
+  KEEP_LLAMA=1 KEEP_MODEL=1 demo/reset.sh >/dev/null 2>&1
   ensure_model_class "$n"
   [ "$n" = 0 ] && return 0
   # Re-apply the non-model tampers for rungs not yet fixed (all cheap). Source
@@ -324,7 +324,7 @@ gate_check() { # apply this rung's policy and run the build's check; expect a re
 cur() { [ -f "$STATE" ] && cat "$STATE" || echo "-1"; }
 
 case "${1:-next}" in
-  stop)  stop_stack; kill_llama; rm -f "$STATE"; make -s reset >/dev/null 2>&1; grn "stopped; repo clean"; exit 0 ;;
+  stop)  stop_stack; kill_llama; rm -f "$STATE"; demo/reset.sh >/dev/null 2>&1; grn "stopped; repo clean"; exit 0 ;;
   show)  export AMPEL; show_tamper "$(rung_for_state "$(cur)")"; exit 0 ;;
   gate)  export AMPEL; gate_check "$(rung_for_state "$(cur)")"; exit 0 ;;
   reset) target=0 ;;
