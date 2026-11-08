@@ -55,62 +55,124 @@ else
 fi
 
 # ---------------------------------------------------------------- facts
-# The resolved dependencies are JSON resource descriptors; the HF snapshot
-# carries a gitCommit digest and the sha256 of every file it contained.
-mapfile -t FACTS < <(python3 - "$BUILD_INFO" "$ROOT" <<'PYEOF'
-import json, os, subprocess, sys
-info = json.load(open(sys.argv[1])); root = sys.argv[2]
-src, b = info["source"], info["builder"]
+# A Python helper reads build-info.json and the build environment and writes
+# each provenance component as a JSON file under a work dir; bash then feeds
+# those to slsa-attester. Files (rather than the name=,uri= shorthand) let the
+# resource descriptors carry names, digests and annotations.
+WORK="$(mktemp -d)"; trap 'rm -rf "$WORK"' EXIT
+mapfile -t META < <(python3 - "$BUILD_INFO" "$ROOT" "$WORK" "$BUILD_DIR" <<'PYEOF'
+import json, os, platform, subprocess, sys
+info_path, root, work, build_dir = sys.argv[1:]
+info = json.load(open(info_path))
+src, b, out = info["source"], info["builder"], info["output"]
+llama_dir = os.path.join(build_dir, "llama.cpp")
 
-def git(*a):
-    try: return subprocess.check_output(["git", "-C", root, *a], text=True, stderr=subprocess.DEVNULL).strip()
+def git(d, *a):
+    try: return subprocess.check_output(["git", "-C", d, *a], text=True, stderr=subprocess.DEVNULL).strip()
     except Exception: return ""
 
+def w(name, obj): json.dump(obj, open(os.path.join(work, name), "w"))
+
+# this repository (the build config source) and the CI identity
 if os.environ.get("GITHUB_REPOSITORY"):
-    repo_url = f"{os.environ.get('GITHUB_SERVER_URL', 'https://github.com')}/{os.environ['GITHUB_REPOSITORY']}"
+    server = os.environ.get("GITHUB_SERVER_URL", "https://github.com")
+    repo_url = f"{server}/{os.environ['GITHUB_REPOSITORY']}"
     commit = os.environ.get("GITHUB_SHA", "")
+    ref = os.environ.get("GITHUB_REF", "")
+    workflow_ref = os.environ.get("GITHUB_WORKFLOW_REF", "")
 else:
-    repo_url = git("remote", "get-url", "origin").removesuffix(".git")
+    repo_url = git(root, "remote", "get-url", "origin").removesuffix(".git")
     if repo_url.startswith("git@github.com:"): repo_url = "https://github.com/" + repo_url.removeprefix("git@github.com:")
-    commit = git("rev-parse", "HEAD")
+    commit = git(root, "rev-parse", "HEAD")
+    ref = "refs/heads/" + git(root, "rev-parse", "--abbrev-ref", "HEAD")
+    workflow_ref = ""
 
 if os.environ.get("GITHUB_ACTIONS") == "true":
     server = os.environ.get("GITHUB_SERVER_URL", "https://github.com")
-    builder = f"{server}/{os.environ.get('GITHUB_WORKFLOW_REF', '')}"
-    invocation = f"{server}/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ.get('GITHUB_RUN_ID', '')}/attempts/{os.environ.get('GITHUB_RUN_ATTEMPT', '1')}"
+    builder = f"{server}/{workflow_ref}"
+    invocation = f"{server}/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ.get('GITHUB_RUN_ID','')}/attempts/{os.environ.get('GITHUB_RUN_ATTEMPT','1')}"
 else:
     builder = os.environ.get("BUILDER_ID", "https://localhost/crustadvisor/model/build.sh")
     invocation = f"urn:uuid:{os.urandom(16).hex()}"
 
-print("sha256:" + info["output"]["oms_sha256"])
-print(builder)
-print(invocation)
-print(info.get("startedOn", ""))
-print(info.get("finishedOn", ""))
-print(json.dumps({"hfRepo": src["repo"], "hfRevision": src["revision"]}))
-print(json.dumps({"llamaCpp": b["llama.cpp"], "quantization": b["quant"]}))
-print(json.dumps({"name": src["repo"], "uri": f"https://huggingface.co/{src['repo']}@{src['revision']}",
+# builder environment: prefer what build.sh recorded, else observe it here
+llama_commit = b.get("llama.cpp_commit") or git(llama_dir, "rev-parse", "HEAD")
+py_ver = b.get("python") or platform.python_version()
+plat = b.get("platform") or f"{platform.system().lower()}/{platform.machine()}"
+oms_ver = b.get("model_signing") or ""
+sde = os.environ.get("SOURCE_DATE_EPOCH", "")
+hf_tree = src.get("uri", f"https://huggingface.co/{src['repo']}/tree/{src['revision']}")
+
+# subject: the OMS root digest, named
+open(os.path.join(work, "checksums.txt"), "w").write(f"{out['oms_sha256']}  {out['name']}\n")
+
+# external parameters: what the build was asked to produce
+w("external.json", {
+    "source": {"repo": src["repo"], "revision": src["revision"], "uri": hf_tree},
+    "quantization": b["quant"], "outputFormat": "gguf", "persona": "model/persona.md",
+    "configSource": {"repository": repo_url, "ref": ref,
+                     "path": ".github/workflows/model-build.yml", "revision": commit},
+})
+# internal parameters: the builder's own environment
+w("internal.json", {k: v for k, v in {
+    "platform": plat, "python": py_ver, "converter": "convert_hf_to_gguf.py",
+    "llamaCppTag": b["llama.cpp"], "sourceDateEpoch": sde,
+}.items() if v})
+
+# resolved dependencies: the inputs that went in
+w("dep-hf.json", {"name": src["repo"], "uri": f"https://huggingface.co/{src['repo']}@{src['revision']}",
                   "digest": {"gitCommit": src["revision"]},
-                  "annotations": {"files": {m["name"]: m["sha256"] for m in info["materials"]}}}))
-print(json.dumps({"name": "llama.cpp", "uri": f"git+https://github.com/ggml-org/llama.cpp@refs/tags/{b['llama.cpp']}"}))
-print(json.dumps({"name": "crustadvisor", "uri": f"git+{repo_url}@{commit}", "digest": {"gitCommit": commit}}) if repo_url else "")
+                  "annotations": {"files": {m["name"]: m["sha256"] for m in info["materials"]}}})
+dep_llama = {"name": "llama.cpp", "uri": f"git+https://github.com/ggml-org/llama.cpp@refs/tags/{b['llama.cpp']}"}
+if llama_commit: dep_llama["digest"] = {"gitCommit": llama_commit}
+w("dep-llama.json", dep_llama)
+has_repo = bool(repo_url)
+if has_repo:
+    w("dep-repo.json", {"name": "crustadvisor", "uri": f"git+{repo_url}@{commit}", "digest": {"gitCommit": commit}})
+
+# builder dependencies: the tools that did the building
+bdep_llama = dict(dep_llama); bdep_llama["name"] = "llama.cpp (convert + quantize)"
+w("bdep-llama.json", bdep_llama)
+w("bdep-python.json", {"name": "python", "uri": "https://www.python.org/", "annotations": {"version": py_ver}})
+if oms_ver:
+    w("bdep-oms.json", {"name": "model-signing", "uri": f"pkg:pypi/model-signing@{oms_ver}", "annotations": {"version": oms_ver}})
+
+# byproducts: intermediate outputs
+f16 = (info.get("byproducts") or {}).get("f16_sha256")
+if f16:
+    w("by-f16.json", {"name": out["name"].replace(".gguf", "-f16.gguf"), "digest": {"sha256": f16},
+                      "annotations": {"note": "unquantized f16 intermediate"}})
+
+# scalars for bash, one per line, in order
+print(builder); print(invocation)
+print(info.get("startedOn", "")); print(info.get("finishedOn", ""))
+print(b["llama.cpp"]); print(b["quant"]); print(oms_ver)
+print("1" if has_repo else ""); print("1" if oms_ver else ""); print("1" if f16 else "")
 PYEOF
 )
-SUBJECT="${FACTS[0]}"; BUILDER="${FACTS[1]}"; INVOCATION="${FACTS[2]}"; STARTED="${FACTS[3]}"; FINISHED="${FACTS[4]}"
-EXTERNAL="${FACTS[5]}"; INTERNAL="${FACTS[6]}"; DEP_HF="${FACTS[7]}"; DEP_LLAMA="${FACTS[8]}"; DEP_REPO="${FACTS[9]:-}"
+BUILDER="${META[0]}"; INVOCATION="${META[1]}"; STARTED="${META[2]}"; FINISHED="${META[3]}"
+BV_LLAMA="${META[4]}"; BV_QUANT="${META[5]}"; OMS_VER="${META[6]}"
+HAS_REPO="${META[7]}"; HAS_OMS="${META[8]}"; HAS_F16="${META[9]}"
 
 ARGS=(build
-  --subject "$SUBJECT"
+  --checksums "$WORK/checksums.txt"
   --build-type "$BUILD_TYPE"
   --builder-id "$BUILDER"
   --invocation-id "$INVOCATION"
-  --external-parameters "$EXTERNAL"
-  --internal-parameters "$INTERNAL"
-  --resolved-dependency "$DEP_HF"
-  --resolved-dependency "$DEP_LLAMA"
+  --external-parameters "@$WORK/external.json"
+  --internal-parameters "@$WORK/internal.json"
+  --resolved-dependency "@$WORK/dep-hf.json"
+  --resolved-dependency "@$WORK/dep-llama.json"
+  --builder-dependency "@$WORK/bdep-llama.json"
+  --builder-dependency "@$WORK/bdep-python.json"
+  --builder-version "llama.cpp=$BV_LLAMA"
+  --builder-version "quantization=$BV_QUANT"
+  --builder-version "slsa-attester=$ATTESTER_VERSION"
 )
-[ -n "$DEP_REPO" ] && ARGS+=(--resolved-dependency "$DEP_REPO")
-[ -n "$STARTED" ] && ARGS+=(--started-on "$STARTED")
+[ -n "$HAS_REPO" ] && ARGS+=(--resolved-dependency "@$WORK/dep-repo.json")
+[ -n "$HAS_OMS" ]  && ARGS+=(--builder-dependency "@$WORK/bdep-oms.json" --builder-version "model-signing=$OMS_VER")
+[ -n "$HAS_F16" ]  && ARGS+=(--byproduct "@$WORK/by-f16.json")
+[ -n "$STARTED" ]  && ARGS+=(--started-on "$STARTED")
 [ -n "$FINISHED" ] && ARGS+=(--finished-on "$FINISHED")
 
 if [ "${SIGN:-0}" = 1 ]; then

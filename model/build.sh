@@ -112,13 +112,21 @@ log "Converting to GGUF (f16)"
 # ---------------------------------------------------------------- quantize
 log "Quantizing to $QUANT"
 "$QUANTIZE" "$F16_GGUF" "$OUT_GGUF" "$QUANT" >/dev/null
+# the unquantized f16 is a build byproduct; record its digest before removing it
+F16_SHA="$( { shasum -a 256 "$F16_GGUF" 2>/dev/null || sha256sum "$F16_GGUF"; } | cut -d' ' -f1 )"
 rm -f "$F16_GGUF"
 
 # ---------------------------------------------------------------- record
 log "Recording build info"
-"$PY" - "$BUILD_INFO" "$HF_REPO" "$HF_REVISION" "$LLAMA_CPP_VERSION" "$QUANT" "$HF_DIR" "$OUT_GGUF" "$STARTED_ON" <<'PYEOF'
+LLAMA_COMMIT="$(git -C "$LLAMA_DIR" rev-parse HEAD 2>/dev/null || echo "")"
+BUILD_PLATFORM="$(uname -s | tr '[:upper:]' '[:lower:]')/$(uname -m)"
+PY_VER="$("$PY" -c 'import platform; print(platform.python_version())' 2>/dev/null || echo "")"
+OMS_VER="1.1.1"   # keep in sync with the model-signing pin above
+"$PY" - "$BUILD_INFO" "$HF_REPO" "$HF_REVISION" "$LLAMA_CPP_VERSION" "$QUANT" "$HF_DIR" "$OUT_GGUF" "$STARTED_ON" \
+      "$LLAMA_COMMIT" "$F16_SHA" "$BUILD_PLATFORM" "$PY_VER" "$OMS_VER" <<'PYEOF'
 import hashlib, json, os, sys, datetime
-out, repo, rev, llama, quant, hf_dir, gguf, started = sys.argv[1:]
+(out, repo, rev, llama, quant, hf_dir, gguf, started,
+ llama_commit, f16_sha, platform, py_ver, oms_ver) = sys.argv[1:]
 
 def sha256(p):
     h = hashlib.sha256()
@@ -137,8 +145,13 @@ for dirpath, dirnames, filenames in os.walk(hf_dir):
 info = {
     "source": {"repo": repo, "revision": rev, "uri": f"https://huggingface.co/{repo}/tree/{rev}"},
     "materials": materials,
-    "builder": {"llama.cpp": llama, "quant": quant},
+    "builder": {k: v for k, v in {
+        "llama.cpp": llama, "llama.cpp_commit": llama_commit, "quant": quant,
+        "converter": "convert_hf_to_gguf.py", "model_signing": oms_ver,
+        "python": py_ver, "platform": platform,
+    }.items() if v},
     "output": {"name": os.path.basename(gguf), "sha256": sha256(gguf), "bytes": os.path.getsize(gguf)},
+    "byproducts": ({"f16_sha256": f16_sha} if f16_sha else {}),
     "startedOn": started,
     "finishedOn": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
 }
