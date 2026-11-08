@@ -29,8 +29,11 @@ LAST=5
 # when the model file's digest changes (into the heist, and into the clean
 # model at the end). State in build/.llama.{pid,digest}; log in build/llama.log.
 MODEL="build/crustadvisor-q4_k_m.gguf"
+PRISTINE_MODEL="build/pristine/crustadvisor-q4_k_m.gguf"
 LLAMA_PID_FILE="build/.llama.pid"
 LLAMA_DIG_FILE="build/.llama.digest"
+LLAMA_STAT_FILE="build/.llama.stat"
+MODEL_CLASS_FILE="build/.model-class"
 LLAMA_LOG="build/llama.log"
 
 b()  { printf '\033[1m%s\033[0m\n' "$*"; }
@@ -120,21 +123,25 @@ kill_llama() {
   local pid; pid="$(cat "$LLAMA_PID_FILE" 2>/dev/null || true)"
   [ -n "${pid:-}" ] && kill "$pid" 2>/dev/null
   pkill -f "llama-server" 2>/dev/null || true
-  rm -f "$LLAMA_PID_FILE" "$LLAMA_DIG_FILE"
+  rm -f "$LLAMA_PID_FILE" "$LLAMA_DIG_FILE" "$LLAMA_STAT_FILE"
 }
 
 ensure_llama() {
-  # Reuse the running model server when it already holds this exact model file;
-  # otherwise (re)load it once. --no-mmap loads the weights into RAM so a later
-  # in-place tamper or reset of the file on disk cannot corrupt the live server.
-  local dig cur; dig="$(shasum -a 256 "$MODEL" | cut -d' ' -f1)"
-  cur="$(cat "$LLAMA_DIG_FILE" 2>/dev/null || true)"
-  if llama_alive && [ "$dig" = "$cur" ] && curl -sf http://127.0.0.1:8080/health >/dev/null 2>&1; then
-    dim "model server: reusing (model ${dig:0:12}, no reload)"
+  # Reuse the running model server when the model file has not changed since it
+  # was loaded. set_state only rewrites the file when the clean/tampered class
+  # changes, so a cheap stat (size+mtime) is a reliable signal and avoids
+  # hashing 2.3GB every step; the full digest is computed only on an actual
+  # (re)load. --load-mode none keeps the weights in RAM so a later rewrite of
+  # the file on disk cannot disturb the live server.
+  local st cur; st="$(stat -f '%z %m' "$MODEL" 2>/dev/null)"
+  cur="$(cat "$LLAMA_STAT_FILE" 2>/dev/null || true)"
+  if llama_alive && [ -n "$st" ] && [ "$st" = "$cur" ] && curl -sf http://127.0.0.1:8080/health >/dev/null 2>&1; then
+    dim "model server: reusing (no model change, no reload)"
     return 0
   fi
   kill_llama; sleep 0.5
-  dim "model server: loading ${dig:0:12} … (first use of this model)"
+  local dig; dig="$(shasum -a 256 "$MODEL" | cut -d' ' -f1)"
+  dim "model server: loading ${dig:0:12} … (model changed)"
   # --load-mode none reads the weights into RAM instead of memory-mapping the
   # file, so reset's in-place `cp` over the model path (same inode) and the
   # tamper rewrite cannot disturb the running server between steps. `set -m`
@@ -150,7 +157,20 @@ ensure_llama() {
     [ "$SECONDS" -gt "$deadline" ] && { red "the model server did not come up; see $LLAMA_LOG"; return 1; }
   done
   echo "$dig" > "$LLAMA_DIG_FILE"
+  echo "$st"  > "$LLAMA_STAT_FILE"
   return 0
+}
+
+ensure_model_class() { # put the model FILE in the class step n needs, only if it must change
+  local n="$1" want have
+  case "$n" in 0|"$LAST") want=clean ;; *) want=tampered ;; esac
+  have="$(cat "$MODEL_CLASS_FILE" 2>/dev/null || echo unknown)"
+  if [ "$want" = "$have" ] && [ -f "$MODEL" ]; then
+    return 0   # already the right class; leave the 2.3GB file (and the server) alone
+  fi
+  cp -p "$PRISTINE_MODEL" "$MODEL"                                   # clean base
+  [ "$want" = tampered ] && attack/ppm-tamper.py "$MODEL" >/dev/null 2>&1
+  echo "$want" > "$MODEL_CLASS_FILE"
 }
 
 gates_for() { # gates earned by step n
@@ -165,14 +185,17 @@ gates_for() { # gates earned by step n
 
 set_state() { # put the repo in the absolute state for step n
   local n="$1"
-  KEEP_LLAMA=1 make -s reset >/dev/null 2>&1   # clean baseline, idempotent; keep the model server
-  [ "$n" = 0 ] && return
-  # Re-apply the tampers for rungs not yet fixed at this step. Source first
-  # (its commit needs a clean tree); dependency last (it dirties a file).
-  [ "$n" -le 1 ] && attack/ppm-commit.sh         >/dev/null 2>&1   # source
-  [ "$n" -le 3 ] && attack/ppm-image.sh          >/dev/null 2>&1   # image
-  [ "$n" -le 4 ] && attack/ppm-tamper.py build/crustadvisor-q4_k_m.gguf >/dev/null 2>&1  # model
-  [ "$n" -le 2 ] && attack/ppm-dependency.sh     >/dev/null 2>&1   # dependency
+  # Cheap reset: undo the source/image/dependency tampers and refresh the
+  # attestations, but leave the 2.3GB model alone (KEEP_MODEL). ensure_model_class
+  # restores or tampers it only when the clean/tampered class actually changes.
+  KEEP_LLAMA=1 KEEP_MODEL=1 make -s reset >/dev/null 2>&1
+  ensure_model_class "$n"
+  [ "$n" = 0 ] && return 0
+  # Re-apply the non-model tampers for rungs not yet fixed (all cheap). Source
+  # first (its commit needs a clean tree); dependency last (it dirties a file).
+  [ "$n" -le 1 ] && attack/ppm-commit.sh     >/dev/null 2>&1   # source
+  [ "$n" -le 3 ] && attack/ppm-image.sh      >/dev/null 2>&1   # image
+  [ "$n" -le 2 ] && attack/ppm-dependency.sh >/dev/null 2>&1   # dependency
   return 0
 }
 
@@ -180,7 +203,8 @@ start_stack() { # serve step n in the background, wait for health
   local gates; gates="$(gates_for "$1")"
   ensure_llama || return 1
   : > "$LOG"
-  APP_MODE=container LLAMA_EXTERNAL=1 nohup demo/serve.sh --gates="$gates" >>"$LOG" 2>&1 &
+  local dig; dig="$(cat "$LLAMA_DIG_FILE" 2>/dev/null || true)"
+  APP_MODE=container LLAMA_EXTERNAL=1 LLAMA_DIGEST="$dig" nohup demo/serve.sh --gates="$gates" >>"$LOG" 2>&1 &
   local deadline=$((SECONDS + 240))
   until curl -sf http://127.0.0.1:8000/api/menu >/dev/null 2>&1; do
     sleep 0.5

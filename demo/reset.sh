@@ -58,15 +58,23 @@ restore() {
     make -s model
     return
   fi
-  cp -p "$PRISTINE/$MODEL" "$BUILD/$MODEL"
+  # The 2.3GB model copy, its sanity re-verify, and even hashing it for a log
+  # line are the slow part of a reset. The stepper, which restores the model
+  # itself only when the clean/tampered class changes, sets KEEP_MODEL=1 to skip
+  # all of that and keep the cheap parts (build-info, attestations, cleanup).
+  if [ "${KEEP_MODEL:-0}" != 1 ]; then
+    cp -p "$PRISTINE/$MODEL" "$BUILD/$MODEL"
+    echo clean > "$BUILD/.model-class"
+    log "restored $MODEL and its attestations"
+  fi
   cp -p "$PRISTINE/build-info.json" "$BUILD/build-info.json"
   rm -rf "$BUILD/attestations"; cp -Rp "$PRISTINE/attestations" "$BUILD/attestations"
   rm -rf "$BUILD/ppm-snapshot" "$BUILD/enriched" "$BUILD"/*.ppm-tmp "$BUILD"/t.gguf "$BUILD"/tampered*.gguf
   rm -f "$BUILD/admit-status.json"
-  log "restored $MODEL ($(shasum -a 256 "$BUILD/$MODEL" | cut -c1-12)) and its attestations"
 }
 
 verify() {
+  [ "${KEEP_MODEL:-0}" = 1 ] && return 0   # the stepper gates the model itself
   local flags=(--no-serve)
   local signed=()
   shopt -s nullglob; signed=("$BUILD"/attestations/*.bundle.json "$BUILD"/attestations/*.jsonl); shopt -u nullglob

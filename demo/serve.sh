@@ -79,8 +79,9 @@ if [ "${LLAMA_EXTERNAL:-0}" = 1 ]; then
   if has model && [ "$UNSAFE" = 0 ]; then
     admit/model-admit --no-serve "${ARGS[@]}" || { trap - INT TERM EXIT; echo "🔴 the model will not be served" >&2; exit 1; }
   elif has model; then
+    # Use the digest the stepper already computed, rather than re-hashing 2.3GB.
     printf '{"status":"ungated","message":"model gate skipped","model":"%s","sha256":"%s","time":"%s"}\n' \
-      "$(basename "$MODEL")" "$(shasum -a 256 "$MODEL" | cut -c1-64)" "$(now)" > build/admit-status.json
+      "$(basename "$MODEL")" "${LLAMA_DIGEST:-$(shasum -a 256 "$MODEL" | cut -c1-64)}" "$(now)" > build/admit-status.json
     echo "⚠️  model gate skipped" >&2
   fi
   deadline=$((SECONDS + 120))
