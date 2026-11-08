@@ -137,9 +137,12 @@ ensure_llama() {
   dim "model server: loading ${dig:0:12} … (first use of this model)"
   # --load-mode none reads the weights into RAM instead of memory-mapping the
   # file, so reset's in-place `cp` over the model path (same inode) and the
-  # tamper rewrite cannot disturb the running server between steps.
+  # tamper rewrite cannot disturb the running server between steps. `set -m`
+  # puts it in its own process group so no stray `kill 0` can reach it.
+  set -m 2>/dev/null || true
   nohup llama-server -m "$MODEL" --jinja --host 127.0.0.1 --port 8080 -c 4096 --load-mode none >>"$LLAMA_LOG" 2>&1 &
   local pid=$!; echo "$pid" > "$LLAMA_PID_FILE"; disown "$pid" 2>/dev/null || true
+  set +m 2>/dev/null || true
   local deadline=$((SECONDS + 240))
   until curl -sf http://127.0.0.1:8080/health >/dev/null 2>&1; do
     sleep 0.5

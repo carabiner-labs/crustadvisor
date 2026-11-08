@@ -35,8 +35,17 @@ APP_CONTAINER=crustadvisor-app
 
 rm -f build/source-status.json build/dep-status.json build/admit-status.json build/image-status.json
 
-cleanup() { trap - INT TERM; docker rm -f "$APP_CONTAINER" >/dev/null 2>&1; kill 0 2>/dev/null; }
-trap cleanup INT TERM EXIT
+# When the stepper owns the model server (LLAMA_EXTERNAL=1), serve.sh must not
+# kill its process group on exit: the persistent llama-server shares that group
+# and the app container runs detached, both managed by the stepper. In the
+# standalone case serve.sh owns everything and cleans the whole group up.
+if [ "${LLAMA_EXTERNAL:-0}" = 1 ]; then
+  cleanup() { trap - INT TERM; docker rm -f "$APP_CONTAINER" >/dev/null 2>&1; }
+  trap cleanup INT TERM
+else
+  cleanup() { trap - INT TERM; docker rm -f "$APP_CONTAINER" >/dev/null 2>&1; kill 0 2>/dev/null; }
+  trap cleanup INT TERM EXIT
+fi
 
 # ---------------------------------------------------------------- source gate
 if has source; then
