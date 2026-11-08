@@ -337,8 +337,8 @@ fxtype() {
   printf '\033[1m'
   for (( i = 0; i < ${#s}; i++ )); do
     c="${s:i:1}"
-    # about 1 in 18 letters comes out wrong first: type a neighbour, pause, erase.
-    if [[ "$c" == [a-z] ]] && [ $(( RANDOM % 18 )) -eq 0 ]; then
+    # about 1 in 30 letters comes out wrong first: type a neighbour, pause, erase.
+    if [[ "$c" == [a-z] ]] && [ $(( RANDOM % 30 )) -eq 0 ]; then
       n=$(( (RANDOM % 25 + 97) )); [ "$n" -eq "$(printf '%d' "'$c")" ] && n=$(( n == 122 ? 97 : n + 1 ))
       wrong=$(printf "\\$(printf '%03o' "$n")")
       printf '%s' "$wrong"; fxsleep 0.16
