@@ -108,3 +108,14 @@ admit/source-admit --local           # notes from this clone (git fetch origin '
 `minLevel` is 1 until the repository is onboarded with `sourcetool setup repo`
 (branch protection, required review, tag rules), after which it can be raised
 and the provenance's `controls` list will show why.
+
+## Policy sets
+
+<!-- policyctl:index:sets:begin -->
+| ID | Name | Version | Policies | Groups | Predicate types |
+|----|------|---------|----------|--------|-----------------|
+| [`CRUSTADVISOR-DEP-ADMIT`](dep-policy.md) | CrustAdvisor Dependency Admission |  | 1 | 0 | `https://cyclonedx.org/bom`<br>`https://spdx.dev/Document`<br>`https://spdx.dev/Document/v3` |
+| [`CRUSTADVISOR-IMAGE-ADMIT`](image-policy.md) | CrustAdvisor Image Admission |  | 2 | 0 | `https://slsa.dev/provenance/v1` |
+| [`CRUSTADVISOR-MODEL-ADMIT`](policy.md) | CrustAdvisor Model Admission |  | 4 | 0 | `https://cyclonedx.org/bom`<br>`https://model_signing/signature/v1.0`<br>`https://slsa.dev/provenance/v1` |
+| [`CRUSTADVISOR-SOURCE-ADMIT`](source-policy.md) | CrustAdvisor Source Admission |  | 2 | 0 | `https://github.com/slsa-framework/slsa-source-poc/source-provenance/v1-draft`<br>`https://github.com/slsa-framework/source-tool/source-provenance/v1`<br>`https://slsa.dev/verification_summary/v1` |
+<!-- policyctl:index:sets:end -->
