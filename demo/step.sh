@@ -25,6 +25,13 @@ export AMPEL="${AMPEL:-$ROOT/build/ampel}"
 STATE="build/demo-step"
 LOG="build/step.log"
 LAST=5
+# The persistent model server: loaded once, reused across steps, reloaded only
+# when the model file's digest changes (into the heist, and into the clean
+# model at the end). State in build/.llama.{pid,digest}; log in build/llama.log.
+MODEL="build/crustadvisor-q4_k_m.gguf"
+LLAMA_PID_FILE="build/.llama.pid"
+LLAMA_DIG_FILE="build/.llama.digest"
+LLAMA_LOG="build/llama.log"
 
 b()  { printf '\033[1m%s\033[0m\n' "$*"; }
 dim(){ printf '\033[2m%s\033[0m\n' "$*"; }
@@ -95,11 +102,52 @@ heist_fx() { # heist_fx <pid>: burn until <pid> finishes, then restore
 }
 
 stop_stack() {
+  # Stop the app and the gate wrapper, but NOT the model server: it is
+  # persistent and ensure_llama decides when it reloads. kill_llama tears it
+  # down for a full stop.
   pkill -f "demo/serve.sh" 2>/dev/null || true
-  pkill -f "llama-server"  2>/dev/null || true
   pkill -f "uvicorn main:app" 2>/dev/null || true
   docker rm -f crustadvisor-app >/dev/null 2>&1 || true
   sleep 1
+}
+
+llama_alive() {
+  local pid; pid="$(cat "$LLAMA_PID_FILE" 2>/dev/null)" || return 1
+  [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null
+}
+
+kill_llama() {
+  local pid; pid="$(cat "$LLAMA_PID_FILE" 2>/dev/null || true)"
+  [ -n "${pid:-}" ] && kill "$pid" 2>/dev/null
+  pkill -f "llama-server" 2>/dev/null || true
+  rm -f "$LLAMA_PID_FILE" "$LLAMA_DIG_FILE"
+}
+
+ensure_llama() {
+  # Reuse the running model server when it already holds this exact model file;
+  # otherwise (re)load it once. --no-mmap loads the weights into RAM so a later
+  # in-place tamper or reset of the file on disk cannot corrupt the live server.
+  local dig cur; dig="$(shasum -a 256 "$MODEL" | cut -d' ' -f1)"
+  cur="$(cat "$LLAMA_DIG_FILE" 2>/dev/null || true)"
+  if llama_alive && [ "$dig" = "$cur" ] && curl -sf http://127.0.0.1:8080/health >/dev/null 2>&1; then
+    dim "model server: reusing (model ${dig:0:12}, no reload)"
+    return 0
+  fi
+  kill_llama; sleep 0.5
+  dim "model server: loading ${dig:0:12} … (first use of this model)"
+  # --load-mode none reads the weights into RAM instead of memory-mapping the
+  # file, so reset's in-place `cp` over the model path (same inode) and the
+  # tamper rewrite cannot disturb the running server between steps.
+  nohup llama-server -m "$MODEL" --jinja --host 127.0.0.1 --port 8080 -c 4096 --load-mode none >>"$LLAMA_LOG" 2>&1 &
+  local pid=$!; echo "$pid" > "$LLAMA_PID_FILE"; disown "$pid" 2>/dev/null || true
+  local deadline=$((SECONDS + 240))
+  until curl -sf http://127.0.0.1:8080/health >/dev/null 2>&1; do
+    sleep 0.5
+    kill -0 "$pid" 2>/dev/null || { red "the model server exited while loading; see $LLAMA_LOG"; return 1; }
+    [ "$SECONDS" -gt "$deadline" ] && { red "the model server did not come up; see $LLAMA_LOG"; return 1; }
+  done
+  echo "$dig" > "$LLAMA_DIG_FILE"
+  return 0
 }
 
 gates_for() { # gates earned by step n
@@ -114,7 +162,7 @@ gates_for() { # gates earned by step n
 
 set_state() { # put the repo in the absolute state for step n
   local n="$1"
-  make -s reset >/dev/null 2>&1          # clean baseline, idempotent
+  KEEP_LLAMA=1 make -s reset >/dev/null 2>&1   # clean baseline, idempotent; keep the model server
   [ "$n" = 0 ] && return
   # Re-apply the tampers for rungs not yet fixed at this step. Source first
   # (its commit needs a clean tree); dependency last (it dirties a file).
@@ -127,8 +175,9 @@ set_state() { # put the repo in the absolute state for step n
 
 start_stack() { # serve step n in the background, wait for health
   local gates; gates="$(gates_for "$1")"
+  ensure_llama || return 1
   : > "$LOG"
-  APP_MODE=container nohup demo/serve.sh --gates="$gates" >>"$LOG" 2>&1 &
+  APP_MODE=container LLAMA_EXTERNAL=1 nohup demo/serve.sh --gates="$gates" >>"$LOG" 2>&1 &
   local deadline=$((SECONDS + 240))
   until curl -sf http://127.0.0.1:8000/api/menu >/dev/null 2>&1; do
     sleep 0.5
@@ -248,7 +297,7 @@ gate_check() { # apply this rung's policy and run the build's check; expect a re
 cur() { [ -f "$STATE" ] && cat "$STATE" || echo "-1"; }
 
 case "${1:-next}" in
-  stop)  stop_stack; rm -f "$STATE"; make -s reset >/dev/null 2>&1; grn "stopped; repo clean"; exit 0 ;;
+  stop)  stop_stack; kill_llama; rm -f "$STATE"; make -s reset >/dev/null 2>&1; grn "stopped; repo clean"; exit 0 ;;
   show)  export AMPEL; show_tamper "$(rung_for_state "$(cur)")"; exit 0 ;;
   gate)  export AMPEL; gate_check "$(rung_for_state "$(cur)")"; exit 0 ;;
   reset) target=0 ;;

@@ -63,18 +63,36 @@ if has dependency; then
 fi
 
 # ---------------------------------------------------------------- model server
-if has model && [ "$UNSAFE" = 0 ]; then
-  admit/model-admit "${ARGS[@]}" &
-else
-  if has model; then
+# LLAMA_EXTERNAL=1: the stepper owns a persistent llama-server and only this
+# process reloads it. We verify (model gate) or report (gate off) here, but
+# never start or stop the server — we just wait for it to answer on :8080.
+if [ "${LLAMA_EXTERNAL:-0}" = 1 ]; then
+  if has model && [ "$UNSAFE" = 0 ]; then
+    admit/model-admit --no-serve "${ARGS[@]}" || { trap - INT TERM EXIT; echo "🔴 the model will not be served" >&2; exit 1; }
+  elif has model; then
     printf '{"status":"ungated","message":"model gate skipped","model":"%s","sha256":"%s","time":"%s"}\n' \
       "$(basename "$MODEL")" "$(shasum -a 256 "$MODEL" | cut -c1-64)" "$(now)" > build/admit-status.json
     echo "⚠️  model gate skipped" >&2
   fi
-  llama-server -m "$MODEL" --jinja --host 127.0.0.1 --port 8080 -c 4096 &
+  deadline=$((SECONDS + 120))
+  until curl -sf http://127.0.0.1:8080/health >/dev/null 2>&1; do
+    sleep 0.3
+    [ "$SECONDS" -gt "$deadline" ] && { trap - INT TERM EXIT; echo "🔴 the persistent model server is not answering on :8080" >&2; exit 1; }
+  done
+else
+  if has model && [ "$UNSAFE" = 0 ]; then
+    admit/model-admit "${ARGS[@]}" &
+  else
+    if has model; then
+      printf '{"status":"ungated","message":"model gate skipped","model":"%s","sha256":"%s","time":"%s"}\n' \
+        "$(basename "$MODEL")" "$(shasum -a 256 "$MODEL" | cut -c1-64)" "$(now)" > build/admit-status.json
+      echo "⚠️  model gate skipped" >&2
+    fi
+    llama-server -m "$MODEL" --jinja --host 127.0.0.1 --port 8080 -c 4096 &
+  fi
+  until curl -sf http://127.0.0.1:8080/health >/dev/null 2>&1 || ! kill -0 %1 2>/dev/null; do sleep 0.3; done
+  kill -0 %1 2>/dev/null || { trap - INT TERM EXIT; echo "🔴 the model server did not start" >&2; exit 1; }
 fi
-until curl -sf http://127.0.0.1:8080/health >/dev/null 2>&1 || ! kill -0 %1 2>/dev/null; do sleep 0.3; done
-kill -0 %1 2>/dev/null || { trap - INT TERM EXIT; echo "🔴 the model server did not start" >&2; exit 1; }
 
 # ---------------------------------------------------------------- app
 # The app runs as a container when the image gate is active, or when APP_MODE

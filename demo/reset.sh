@@ -21,7 +21,11 @@ log() { printf '\033[1;32m♻️  %s\033[0m\n' "$*" >&2; }
 
 stop_servers() {
   pkill -f "demo/serve.sh" 2>/dev/null || true
-  pkill -f "llama-server" 2>/dev/null || true
+  # The stepper runs one persistent llama-server across steps (loaded with
+  # --no-mmap, so a file rewritten under it is harmless) and reloads it itself
+  # only when the model digest changes. It sets KEEP_LLAMA=1 so a reset between
+  # steps does not tear that server down. Standalone resets still stop it.
+  [ "${KEEP_LLAMA:-0}" = 1 ] || pkill -f "llama-server" 2>/dev/null || true
   pkill -f "uvicorn main:app" 2>/dev/null || true
   sleep 0.5
 }
