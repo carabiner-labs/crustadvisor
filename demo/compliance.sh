@@ -68,25 +68,27 @@ PY
 )"
   algo="$(printf '%s\n' "$info" | sed -n 1p)"; val="$(printf '%s\n' "$info" | sed -n 2p)"
   status="$(printf '%s\n' "$info" | sed -n 3p)"; declared="$(printf '%s\n' "$info" | sed -n 4p)"
-  case "$algo" in
-    sha256|sha384|sha512)
-      # content-addressable: let checkpoint compile the evaluation against the catalog
-      "$CHECKPOINT" status "$algo:$val" "$FRAMEWORK" -a "$res" --format markdown > "$OUT/report-$gate.md" 2>/dev/null || true
-      # control-summary rows: | OSPS-BR-06 | <class> | <title> | 🟢 PASS | n |  (skip .NN requirement rows)
-      awk -F'|' -v gate="$gate" '
-        /🟢 PASS/ {
-          c=$2; gsub(/ /,"",c)
-          if (c ~ /^OSPS-[A-Z][A-Z]-[0-9][0-9]$/) { t=$4; gsub(/^ +| +$/,"",t); print c"\t"t"\t"gate }
-        }' "$OUT/report-$gate.md" >> "$PASS" ;;
-    *)
-      # the subject is not a content digest checkpoint can address (a git commit):
-      # record the gate's own passing, declared controls instead.
-      if [ "$status" = "PASS" ] && [ -n "$declared" ]; then
-        NONADDR=1
-        IFS=',' read -ra ctls <<< "$declared"
-        for c in "${ctls[@]}"; do printf '%s\t%s\t%s*\n' "$c" "$(ctrl_title "$c")" "$gate"; done >> "$PASS"
-      fi ;;
-  esac
+  [ -n "$algo" ] && [ -n "$val" ] || continue
+
+  # Let checkpoint compile the evaluation against the catalog. It addresses any
+  # subject in-toto knows, including git commits.
+  before="$(wc -l < "$PASS")"
+  if "$CHECKPOINT" status "$algo:$val" "$FRAMEWORK" -a "$res" --format markdown > "$OUT/report-$gate.md" 2>/dev/null; then
+    # control-summary rows: | OSPS-BR-06 | <class> | <title> | 🟢 PASS | n |  (skip .NN requirement rows)
+    awk -F'|' -v gate="$gate" '
+      /🟢 PASS/ {
+        c=$2; gsub(/ /,"",c)
+        if (c ~ /^OSPS-[A-Z][A-Z]-[0-9][0-9]$/) { t=$4; gsub(/^ +| +$/,"",t); print c"\t"t"\t"gate }
+      }' "$OUT/report-$gate.md" >> "$PASS"
+  fi
+
+  # Fallback for an older checkpoint that cannot address this subject (e.g. a git
+  # commit): record the gate's own passing, declared controls instead.
+  if [ "$(wc -l < "$PASS")" = "$before" ] && [ "$status" = "PASS" ] && [ -n "$declared" ]; then
+    NONADDR=1
+    IFS=',' read -ra ctls <<< "$declared"
+    for c in "${ctls[@]}"; do printf '%s\t%s\t%s*\n' "$c" "$(ctrl_title "$c")" "$gate"; done >> "$PASS"
+  fi
 done
 
 # 3. One summary table across all gates.
