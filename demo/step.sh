@@ -3,8 +3,11 @@
 #
 #   demo/step.sh            advance to the next step (and restart the stack)
 #   demo/step.sh <n>        jump to step n (0..5)
+#   demo/step.sh which      where we are: current step, fixes, what is still open
 #   demo/step.sh reset      back to step 0 (clean)
 #   demo/step.sh stop       stop the stack, leave the repo clean
+#
+# A step only types out the fix as if at the keyboard; `which` is the status.
 #
 # The walk:
 #   0  CLEAN       everything works, no gates
@@ -248,7 +251,7 @@ banner() {
     dim "  make gate   — apply the ${rung} policy; the build refuses it"
     dim "  make step   — fix the ${rung} and move on"
   fi
-  dim "http://127.0.0.1:8000    (make step to advance, make reset to restart, make stop to end)"
+  dim "http://127.0.0.1:8000    (make step to advance, make which for status, make reset / make stop)"
   echo
 }
 
@@ -369,7 +372,6 @@ fix_transcript() { # fix_transcript <rung> <pid>: narrate the fix while <pid> wo
   echo
   case "$rung" in
     source)
-      fxn "🔧  the Pineapple Pizza Mafia landed a commit on main — drop it and push"
       fxc "git log --oneline -2"
       fxo "\033[31m$(fxsha)\033[0m (HEAD -> main)  Improve order confirmation UX 🍍   ← Pineapple Pizza Mafia"
       fxo "baa7dcf  Persona: scope the theatrical refusal to pineapple only"
@@ -379,7 +381,6 @@ fix_transcript() { # fix_transcript <rung> <pid>: narrate the fix while <pid> wo
       fxo "baa7dcf..$(fxsha)  main -> main (forced update)"
       fxo "slsa-source → attesting the clean HEAD" ;;
     dependency)
-      fxn "🔧  a poisoned crust-receipt 1.1.0 slipped in — restore the hash-pinned 1.0.0"
       fxc "grep crust-receipt app/requirements.txt"
       fxo "crust-receipt==\033[31m1.1.0\033[0m --hash=sha256:9f2c…pineapple"
       fxc "git checkout -- app/requirements.txt"
@@ -387,14 +388,12 @@ fix_transcript() { # fix_transcript <rung> <pid>: narrate the fix while <pid> wo
       fxo "built crust-receipt-1.0.0  sha256:3a7e…clean, re-pinned by hash"
       fxo "unpack → dependency SBOM regenerated" ;;
     image)
-      fxn "🔧  crustadvisor/base:latest was hijacked — point it back at the signed base"
       fxc "docker inspect crustadvisor/base:latest --format '{{.Id}}'"
       fxo "sha256:\033[31mbad1f00d\033[0m…   ← the PPM base image"
       fxc "docker tag crustadvisor/base:clean crustadvisor/base:latest"
       fxc "bnd verify base-image provenance"
       fxo "signed by .github/workflows/base-image.yml ✓" ;;
     model)
-      fxn "🔧  the GGUF chat template was tampered post-build — pull the signed model"
       fxc "make pull"
       fxo "⬇️  ghcr.io/carabiner-labs/crustadvisor/model:latest"
       fxo "model 91953f30…  +  3 signed attestations"
@@ -410,13 +409,13 @@ case "${1:-next}" in
   stop)  stop_stack; kill_llama; rm -f "$STATE"; demo/reset.sh >/dev/null 2>&1; grn "stopped; repo clean"; exit 0 ;;
   show)  export AMPEL; show_tamper "$(rung_for_state "$(cur)")"; exit 0 ;;
   gate)  export AMPEL; gate_check "$(rung_for_state "$(cur)")"; exit 0 ;;
+  which) c="$(cur)"; { [ "$c" -ge 0 ] 2>/dev/null && banner "$c"; } || dim "the demo has not started — run: make start"; exit 0 ;;
   reset) target=0 ;;
   next)  c="$(cur)"; target=$(( c < 0 ? 0 : c + 1 )); [ "$target" -gt "$LAST" ] && { b "Already at the last step. demo/step.sh reset to start over."; exit 0; } ;;
   *)     target="$1"; case "$target" in [0-5]) ;; *) red "usage: demo/step.sh [next|reset|stop|0-5]"; exit 2 ;; esac ;;
 esac
 
 prev="$(cur)"
-b "→ moving to step $target …"
 stop_stack
 fix_rung="$(fix_rung_for "$target")"
 if [ "$target" -eq 1 ] 2>/dev/null; then
@@ -432,10 +431,8 @@ elif [ -n "$fix_rung" ] && [ "$prev" = "$((target - 1))" ] && { [ -t 1 ] || [ -n
   worker=$!
   fix_transcript "$fix_rung" "$worker"
   wait "$worker" || { red "step $target failed to serve; see $LOG"; exit 1; }
-  grn "   ✓ the ${fix_rung} rung is clean — gate green"
 else
   set_state "$target"
   echo "$target" > "$STATE"
   start_stack "$target" || { red "step $target failed to serve"; exit 1; }
 fi
-banner "$target"

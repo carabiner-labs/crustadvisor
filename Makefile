@@ -1,7 +1,7 @@
 # CrustAdvisor demo targets. Each target is wired up as its component lands.
 SHELL := /bin/bash
 
-.PHONY: help model attest sign publish pull app serve serve-unsafe tamper tamper-build swap-ppm tamper-app reset-app stage-clean stage-evil stage-status stage-attest build-base tamper-image reset-image image-admit build-wheels tamper-dep reset-dep dep-admit start stop step show gate admit admit-rehearsal source-admit vsa compliance reset
+.PHONY: help model attest sign publish pull app serve serve-unsafe tamper tamper-build swap-ppm tamper-app reset-app stage-clean stage-evil stage-status stage-attest build-base tamper-image reset-image image-admit build-wheels tamper-dep reset-dep dep-admit start stop step which show gate admit admit-rehearsal source-admit vsa compliance reset
 
 # Set ADMIT_FLAGS=--rehearsal to admit the unsigned statements written by the
 # build (development). Without it only signed bundles count (stage).
@@ -119,6 +119,8 @@ stop: ## Stop the demo: stop the running services and clean the repo
 	@demo/step.sh stop
 step: ## Advance the demo to the next step
 	@demo/step.sh
+which: ## Where are we: the current step, what is fixed, what is still open
+	@demo/step.sh which
 reset: ## Go back to step 0 (clean, serving)
 	@demo/step.sh reset
 show: ## Show the PPM tamper for the rung coming next in the walk
