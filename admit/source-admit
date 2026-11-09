@@ -69,7 +69,7 @@ status() {  # status <pass|fail> <message>
     "$1" "$2" "$COMMIT" "$(printf '%s' "$SUBJECT" | sed 's/"/\\"/g')" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$STATUS"
 }
 
-ARGS=(verify "gitCommit:$COMMIT" -p "$POLICY" -c "$COLLECTOR" --attest-results --attest-format vsa --results-path "$VSA" "${CONTEXT[@]}")
+ARGS=(verify "gitCommit:$COMMIT" -p "$POLICY" -c "$COLLECTOR" --attest-results --attest-format "${RESULTS_FORMAT:-vsa}" --results-path "${RESULTS_PATH:-$VSA}" "${CONTEXT[@]}")
 [ "$SIGN_VSA" = 1 ] && ARGS+=(--sign)
 
 echo "🚦 source-admit: $SUBJECT — notes from $COLLECTOR" >&2

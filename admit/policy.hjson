@@ -9,6 +9,7 @@
         description: "The model about to be served carries a verified OpenSSF Model Signing signature from our build, was built from the pinned upstream model, and is described by an ML-BOM we accept"
         frameworks: [
             { id: "SLSA", name: "Supply-Chain Levels for Software Artifacts" }
+            { id: "OSPS", name: "OpenSSF Open Source Project Security Baseline" }
         ]
     }
 
@@ -47,7 +48,9 @@
             meta: {
                 name: "Signed Model"
                 description: "OpenSSF Model Signing statement bound to this exact file, with a verified signature"
-                controls: [ { framework: "SLSA", class: "BUILD", id: "LEVEL_1" } ]
+                // OSPS Baseline BR-06: the released model carries a cryptographic
+                // signature (OpenSSF Model Signing) produced at build time.
+                controls: [ { framework: "SLSA", class: "BUILD", id: "LEVEL_1" }, { framework: "OSPS", class: "BR", id: "06" } ]
             }
             predicates: { types: [ "https://model_signing/signature/v1.0" ] }
             tenets: [
@@ -136,6 +139,12 @@
             meta: {
                 name: "Acceptable ML-BOM"
                 description: "The model and its base model are licensed and serialized in ways we accept"
+                // OSPS Baseline: the ML-BOM is the model's component/dependency
+                // list (QA-02), and every component's license is OSS (LE-02).
+                controls: [
+                    { framework: "OSPS", class: "QA", id: "02" }
+                    { framework: "OSPS", class: "LE", id: "02" }
+                ]
             }
             predicates: { types: [ "https://cyclonedx.org/bom" ] }
             tenets: [

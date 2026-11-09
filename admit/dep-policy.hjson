@@ -10,6 +10,7 @@
         description: "The app's dependency SBOM lists crust-receipt only at an allowed version"
         frameworks: [
             { id: "SLSA", name: "Supply-Chain Levels for Software Artifacts" }
+            { id: "OSPS", name: "OpenSSF Open Source Project Security Baseline" }
         ]
     }
 
@@ -30,6 +31,14 @@
             meta: {
                 name: "Pinned Dependency"
                 description: "crust-receipt is present in the SBOM at an allowed version"
+                // OSPS Baseline: the SBOM is the project's dependency list (QA-02),
+                // every component carries a version (BR-02), and the app ingests
+                // them through a pinned manifest / lockfile (BR-05).
+                controls: [
+                    { framework: "OSPS", class: "QA", id: "02" }
+                    { framework: "OSPS", class: "BR", id: "02" }
+                    { framework: "OSPS", class: "BR", id: "05" }
+                ]
             }
             predicates: {
                 types: [

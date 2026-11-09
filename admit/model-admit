@@ -73,7 +73,7 @@ status() {  # status <pass|fail|ungated> <message>
     "$1" "$2" "$(basename "$MODEL")" "$(shasum -a 256 "$MODEL" | cut -c1-64)" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$STATUS"
 }
 
-ARGS=(verify model "$MODEL" -p "$POLICY" --attest-results --attest-format vsa --results-path "$VSA")
+ARGS=(verify model "$MODEL" -p "$POLICY" --attest-results --attest-format "${RESULTS_FORMAT:-vsa}" --results-path "${RESULTS_PATH:-$VSA}")
 if [ "$REHEARSAL" = 1 ]; then
   shopt -s nullglob; STATEMENTS=("$ATT"/*.intoto.json); shopt -u nullglob
   [ ${#STATEMENTS[@]} -gt 0 ] || { echo "error: no unsigned statements in $ATT to rehearse with (run make attest)" >&2; exit 2; }

@@ -10,6 +10,7 @@
         description: "The base image the app is about to be built on carries SLSA provenance bound to its digest, signed by our builder"
         frameworks: [
             { id: "SLSA", name: "Supply-Chain Levels for Software Artifacts" }
+            { id: "OSPS", name: "OpenSSF Open Source Project Security Baseline" }
         ]
     }
 
@@ -31,7 +32,9 @@
             meta: {
                 name: "Signed Base Image"
                 description: "SLSA provenance is bound to this image digest and its signature verifies"
-                controls: [ { framework: "SLSA", class: "BUILD", id: "LEVEL_1" } ]
+                // OSPS Baseline BR-06: the released base image ships with signed
+                // SLSA provenance bound to its digest.
+                controls: [ { framework: "SLSA", class: "BUILD", id: "LEVEL_1" }, { framework: "OSPS", class: "BR", id: "06" } ]
             }
             predicates: { types: [ "https://slsa.dev/provenance/v1" ] }
             tenets: [

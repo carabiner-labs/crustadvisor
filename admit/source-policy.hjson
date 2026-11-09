@@ -12,6 +12,7 @@
         description: "The commit about to be built carries signed SLSA source provenance for this repository's main branch, and a verification summary at the required source level"
         frameworks: [
             { id: "SLSA", name: "Supply-Chain Levels for Software Artifacts" }
+            { id: "OSPS", name: "OpenSSF Open Source Project Security Baseline" }
         ]
     }
 
@@ -43,7 +44,10 @@
             meta: {
                 name: "Source Provenance"
                 description: "Signed SLSA source provenance exists for this commit, about this repository and branch"
-                controls: [ { framework: "SLSA", class: "SOURCE", id: "LEVEL_1" } ]
+                // OSPS Baseline AC-03: the provenance attests that the revision
+                // reached the primary branch through the repository's process,
+                // evidence that the branch is protected from unintended changes.
+                controls: [ { framework: "SLSA", class: "SOURCE", id: "LEVEL_1" }, { framework: "OSPS", class: "AC", id: "03" } ]
             }
             predicates: {
                 types: [

@@ -1,7 +1,7 @@
 # CrustAdvisor demo targets. Each target is wired up as its component lands.
 SHELL := /bin/bash
 
-.PHONY: help model attest sign publish pull app serve serve-unsafe tamper tamper-build swap-ppm tamper-app reset-app stage-clean stage-evil stage-status stage-attest build-base tamper-image reset-image image-admit build-wheels tamper-dep reset-dep dep-admit start stop step show gate admit admit-rehearsal source-admit vsa reset
+.PHONY: help model attest sign publish pull app serve serve-unsafe tamper tamper-build swap-ppm tamper-app reset-app stage-clean stage-evil stage-status stage-attest build-base tamper-image reset-image image-admit build-wheels tamper-dep reset-dep dep-admit start stop step show gate admit admit-rehearsal source-admit vsa compliance reset
 
 # Set ADMIT_FLAGS=--rehearsal to admit the unsigned statements written by the
 # build (development). Without it only signed bundles count (stage).
@@ -109,6 +109,9 @@ admit-rehearsal: ## Same, admitting the unsigned statements from the build
 
 vsa: ## Show the verdict of the last gate run (SLSA Verification Summary Attestation)
 	@python3 -c 'import json; d=json.load(open("build/vsa.intoto.json")); p=d["predicate"]; print(json.dumps({"subject": d["subject"], "verifier": p.get("verifier"), "policy": p.get("policy"), "result": p.get("verificationResult"), "verifiedLevels": p.get("verifiedLevels"), "timeVerified": p.get("timeVerified")}, indent=2))'
+
+compliance: ## Compile OSPS Baseline compliance from the gates with checkpoint
+	@demo/compliance.sh
 
 start: ## Start the demo at step 0 (clean, serving)
 	@demo/step.sh reset

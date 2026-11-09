@@ -48,7 +48,7 @@ status() {
 }
 
 "$AMPEL" verify "sha256:$DIGEST" -p "$POLICY" -a "$WORK/sbom.spdx.intoto.json" \
-  --attest-results --attest-format vsa --results-path "$VSA" "${CONTEXT[@]}" 2> >(grep -v "unsigned or its signature" >&2)
+  --attest-results --attest-format "${RESULTS_FORMAT:-vsa}" --results-path "${RESULTS_PATH:-$VSA}" "${CONTEXT[@]}" 2> >(grep -v "unsigned or its signature" >&2)
 rc=$?
 if [ $rc -ne 0 ]; then
   status fail "AMPEL policy CRUSTADVISOR-DEP-ADMIT failed"

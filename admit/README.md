@@ -109,6 +109,32 @@ admit/source-admit --local           # notes from this clone (git fetch origin '
 (branch protection, required review, tag rules), after which it can be raised
 and the provenance's `controls` list will show why.
 
+## OSPS Baseline compliance
+
+The same evidence the gates check also maps to the
+[OpenSSF Open Source Project Security Baseline](https://baseline.openssf.org/).
+Each policy declares the baseline controls it satisfies in its `meta.controls`,
+so a passing evaluation's VSA carries them (for example the model gate's VSA
+lists `OSPS_BR_06`, `OSPS_QA_02`, `OSPS_LE_02` beside its SLSA levels).
+
+`make compliance` (demo/compliance.sh) re-runs the gates as AMPEL results and
+feeds them to [checkpoint](https://github.com/carabiner-dev/checkpoint), which
+matches them against the Gemara baseline catalog in `osps-baseline.gemara.yaml`
+and compiles a per-control report into `build/compliance/`. The controls our
+supply-chain evidence covers:
+
+| Control | Title | From |
+| --- | --- | --- |
+| OSPS-AC-03 | Protect the Primary Branch from Accidental Modification | source provenance |
+| OSPS-BR-02 | Assign Unique Version Identifiers | dependency SBOM |
+| OSPS-BR-05 | Use Standardized Dependency Management Tools | dependency SBOM |
+| OSPS-BR-06 | Include Signatures and Hashes With Release | model + image provenance |
+| OSPS-LE-02 | Ensure Project Licenses are Fully Open Source | model ML-BOM |
+| OSPS-QA-02 | Publish Software Dependencies | dependency SBOM + model ML-BOM |
+
+checkpoint addresses artifacts by content digest, so the source control (a git
+commit subject) is listed from the source gate's own evaluation.
+
 ## Policy sets
 
 <!-- policyctl:index:sets:begin -->
